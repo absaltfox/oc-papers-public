@@ -1,0 +1,337 @@
+{
+  "version": 1,
+  "generatedAt": "2026-02-20T11:39:03.243Z",
+  "source": {
+    "documents": 90,
+    "dailyHourLocal": 2
+  },
+  "stats": {
+    "candidatePhrases": 245,
+    "qualityFilteredPhrases": 212,
+    "concepts": 61,
+    "aliases": 5
+  },
+  "concepts": [
+    {
+      "canonical": "educational leadership",
+      "variants": [],
+      "docFreq": 83
+    },
+    {
+      "canonical": "post secondary",
+      "variants": [
+        "post secondary institutions",
+        "post secondary institution"
+      ],
+      "docFreq": 15
+    },
+    {
+      "canonical": "school district",
+      "variants": [],
+      "docFreq": 7
+    },
+    {
+      "canonical": "theoretical framework",
+      "variants": [],
+      "docFreq": 7
+    },
+    {
+      "canonical": "educational leaders",
+      "variants": [],
+      "docFreq": 6
+    },
+    {
+      "canonical": "school system",
+      "variants": [],
+      "docFreq": 6
+    },
+    {
+      "canonical": "social justice",
+      "variants": [],
+      "docFreq": 6
+    },
+    {
+      "canonical": "educational studies",
+      "variants": [],
+      "docFreq": 6
+    },
+    {
+      "canonical": "indigenous knowledge",
+      "variants": [],
+      "docFreq": 6
+    },
+    {
+      "canonical": "focus group",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "focus groups",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "student success",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "faculty members",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "indigenous peoples",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "narrative inquiry",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "educational practices",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "self determination",
+      "variants": [],
+      "docFreq": 5
+    },
+    {
+      "canonical": "policy development",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "make meaning",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "government officials",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "educational policy",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "hannah arendt",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "mixed methods",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "policy documents",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "professional learning",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "decision making",
+      "variants": [],
+      "docFreq": 4
+    },
+    {
+      "canonical": "aboriginal people",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "policy texts",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "service delivery",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "across canada",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "social cultural",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "symbolic capital",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "health care",
+      "variants": [
+        "health care system"
+      ],
+      "docFreq": 3
+    },
+    {
+      "canonical": "public school",
+      "variants": [
+        "public school system"
+      ],
+      "docFreq": 3
+    },
+    {
+      "canonical": "high school",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "qualitative case",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "support students",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "private spaces",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "multiple case",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "data collected",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "interview data",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "critical theory",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "personal stories",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "vancouver island",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "critical discourse",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "public schools",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "cultural knowledge",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "residential school",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "teaching practice",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "will help",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "educational system",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "supporting students",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "paulo freire",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "three themes",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "united states",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "semi structured",
+      "variants": [
+        "semi structured interviews"
+      ],
+      "docFreq": 3
+    },
+    {
+      "canonical": "institutional ethnography",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "colonial history",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "21st century",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "socio cultural",
+      "variants": [],
+      "docFreq": 3
+    },
+    {
+      "canonical": "lifelong learning",
+      "variants": [],
+      "docFreq": 3
+    }
+  ],
+  "variantToCanonical": {
+    "post secondary institutions": "post secondary",
+    "post secondary institution": "post secondary",
+    "health care system": "health care",
+    "public school system": "public school",
+    "semi structured interviews": "semi structured"
+  }
+}

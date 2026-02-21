@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UBC Dissertation Intelligence</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-shape s1"></div>
+    <div class="bg-shape s2"></div>
+
+    <main class="page">
+      <header class="hero reveal">
+        <p class="eyebrow">UBC Open Collections</p>
+        <h1>Dissertation Intelligence Workbench</h1>
+        <p class="subtitle">Explore dissertation records, inspect related themes, and discover patterns across the EdD dissertation corpus.</p>
+      </header>
+
+      <section class="status-wrap reveal">
+        <div id="status" class="status">
+          <span id="statusText">Ready.</span>
+          <span id="spinner" class="spinner" hidden></span>
+        </div>
+      </section>
+
+      <nav class="tabs reveal" role="tablist" aria-label="Views">
+        <button class="tab-btn active" data-tab="records" role="tab" aria-selected="true">Document Explorer</button>
+        <button class="tab-btn" data-tab="analytics" role="tab" aria-selected="false">Analytics Dashboard</button>
+        <button class="tab-btn" data-tab="citations" role="tab" aria-selected="false">Citation Explorer</button>
+      </nav>
+
+      <!-- Document Explorer -->
+      <section id="tab-records" class="tab-panel reveal active" role="tabpanel">
+        <article class="panel">
+          <h2>Retrieved Documents</h2>
+          <input id="docFilter" class="doc-filter" type="search" placeholder="Filter by title, author, supervisor, degree..." />
+          <div class="export-row">
+            <button id="exportBibTeX" class="btn ghost btn-sm">Export BibTeX</button>
+            <button id="exportRIS" class="btn ghost btn-sm">Export RIS</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="doc-check-col"><input id="selectAllDocs" type="checkbox" title="Select all" /></th>
+                  <th class="sortable" data-sort-key="title">Title</th>
+                  <th class="sortable" data-sort-key="author">Author</th>
+                  <th class="sortable" data-sort-key="year">Year</th>
+                  <th class="sortable" data-sort-key="degree">Degree</th>
+                  <th class="sortable" data-sort-key="pages">Pages</th>
+                  <th class="sortable" data-sort-key="wordCount">Words</th>
+                </tr>
+              </thead>
+              <tbody id="documentsTable"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <!-- Document detail modal -->
+      <div id="docModalOverlay" class="doc-modal-overlay" hidden>
+        <div class="doc-modal panel">
+          <button id="docModalClose" class="doc-modal-close" aria-label="Close">&times;</button>
+          <h2 id="docModalTitle">Document Details</h2>
+          <div id="docDetails" class="detail-body"></div>
+        </div>
+      </div>
+
+      <!-- Analytics Dashboard -->
+      <section id="tab-analytics" class="tab-panel reveal" role="tabpanel">
+        <section id="kpis" class="kpis"></section>
+
+        <div class="analytics-grid">
+          <div class="analytics-left">
+            <article class="panel">
+              <h2>Average Page Length by Year</h2>
+              <svg id="pagesByYearChart" viewBox="0 0 940 360" role="img" aria-label="Average pages by year"></svg>
+            </article>
+
+            <article class="panel">
+              <h2>Dissertations by Year</h2>
+              <svg id="dissertationsByYearChart" viewBox="0 0 940 360" role="img" aria-label="Dissertations by year"></svg>
+            </article>
+
+            <article class="panel">
+              <h2>Mean Word Count by Year</h2>
+              <svg id="wordsByYearChart" viewBox="0 0 940 360" role="img" aria-label="Mean word count by year"></svg>
+            </article>
+
+            <article class="panel">
+              <h2>Dissertation Length Trend (Median Pages by Year)</h2>
+              <svg id="pageTrendChart" viewBox="0 0 940 360" role="img" aria-label="Median pages by year with min/max band"></svg>
+            </article>
+
+            <article class="panel">
+              <h2>Concept Frequency Over Time</h2>
+              <svg id="conceptTimelineChart" viewBox="0 0 940 360" role="img" aria-label="Concept frequency by year"></svg>
+              <div id="conceptTimelineLegend" class="timeline-legend"></div>
+            </article>
+          </div>
+
+          <div class="analytics-right">
+            <article class="panel word-cloud-panel">
+              <h2>Word Cloud (Themes)</h2>
+              <div id="wordCloud" class="word-cloud"></div>
+              <div id="themeResults" class="theme-results"></div>
+            </article>
+
+            <article class="panel word-cloud-panel">
+              <h2>Concept Cloud</h2>
+              <div id="ngramCloud" class="word-cloud"></div>
+            </article>
+          </div>
+        </div>
+
+        <article class="panel">
+          <h2>Methodology Detection</h2>
+          <div id="methodologyBars" class="bars"></div>
+        </article>
+
+        <article class="panel">
+          <h2>Co-occurring Concepts</h2>
+          <div id="cooccurrenceBars" class="bars"></div>
+        </article>
+
+        <article class="panel">
+          <h2>Supervisor &ndash; Concept Heatmap</h2>
+          <div id="supervisorHeatmap" class="table-wrap"></div>
+        </article>
+
+        <article class="panel">
+          <h2>Methodology &ndash; Concept Matrix</h2>
+          <div id="methodologyConceptHeatmap" class="table-wrap"></div>
+        </article>
+
+        <article class="panel">
+          <h2>Research Gap Suggestions</h2>
+          <p class="meta" style="margin-bottom:0.5rem">Concept pairs that are individually common but rarely co-occur &mdash; potential unexplored intersections.</p>
+          <div id="researchGapsList" class="bars"></div>
+        </article>
+
+        <article class="panel">
+          <h2>Weighted Mean Word Count by Concept</h2>
+          <div id="subjectBars" class="bars"></div>
+        </article>
+      </section>
+
+      <!-- Citation Explorer -->
+      <section id="tab-citations" class="tab-panel reveal" role="tabpanel">
+        <nav class="citation-tabs">
+          <button class="citation-tab-btn active" data-citation-tab="browse">Browse Citations</button>
+          <button class="citation-tab-btn" data-citation-tab="foundational">Foundational Works</button>
+        </nav>
+        <div id="citation-browse" class="citation-tab-section active">
+        <div class="citations-explorer">
+          <div class="citations-list-col">
+            <article class="panel">
+              <h2>Dissertations</h2>
+              <input id="citationDocFilter" class="doc-filter" type="search"
+                     placeholder="Filter dissertations..." />
+              <div class="table-wrap">
+                <table class="citation-docs-table">
+                  <thead>
+                    <tr>
+                      <th>Title</th>
+                      <th>Author</th>
+                      <th>Year</th>
+                      <th>Refs</th>
+                    </tr>
+                  </thead>
+                  <tbody id="citationDocsTable"></tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+          <div class="citations-detail-col">
+            <article class="panel">
+              <div class="export-row" style="margin-bottom:0.5rem">
+                <h2 id="citationListTitle" style="margin:0;flex:1">Works Cited</h2>
+                <button id="exportCitationBibTeX" class="btn ghost btn-sm">Export BibTeX</button>
+                <button id="exportCitationRIS" class="btn ghost btn-sm">Export RIS</button>
+              </div>
+              <div id="citationEntries" class="citation-entries"><p class="meta">Select a document to view its works cited.</p></div>
+            </article>
+          </div>
+        </div>
+        </div>
+        <div id="citation-foundational" class="citation-tab-section">
+        <article class="panel">
+          <h2>Foundational Works</h2>
+          <p class="meta" style="margin-bottom:0.5rem">Citations appearing across the most dissertations in the database.</p>
+          <div id="foundationalWorksList" class="foundational-works-list"></div>
+        </article>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
