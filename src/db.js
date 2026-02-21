@@ -1,4 +1,4 @@
-import { createClient } from '@libsql/client';
+import { createClient } from '@libsql/client/web';
 import path from 'node:path';
 
 const url = process.env.TURSO_DATABASE_URL || `file:${path.join(process.cwd(), 'data', 'metrics.sqlite')}`;
