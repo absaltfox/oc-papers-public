@@ -50,6 +50,21 @@ export async function listAllCommitteeMembers() {
   return map;
 }
 
+// --- Citation counts per document ---
+
+export async function listAllCitationCounts() {
+  const result = await client.execute(`
+    SELECT doc_id, COUNT(*) as count
+    FROM document_citations
+    GROUP BY doc_id
+  `);
+  const map = new Map();
+  for (const row of result.rows) {
+    map.set(row.doc_id, Number(row.count));
+  }
+  return map;
+}
+
 // --- Citation functions ---
 
 export async function loadDocumentCitationsWithSharing(docId) {

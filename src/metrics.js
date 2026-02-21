@@ -5,6 +5,7 @@ import {
   listAllDocumentMetadata,
   listAllFileMetrics,
   listAllCommitteeMembers,
+  listAllCitationCounts,
 } from './db.js';
 import {
   toArray, flattenText, extractYear, parsePageCount, topTermsFromText, buildWordCloud,
@@ -507,10 +508,11 @@ function buildResearchGaps(records, topN = 15) {
 
 export async function collectMetricsFromDb({ subjectLimit = 25 } = {}) {
   const conceptDict = loadConceptDictionary();
-  const [allDocs, fileMetricsMap, committeeMembersMap] = await Promise.all([
+  const [allDocs, fileMetricsMap, committeeMembersMap, citationCountsMap] = await Promise.all([
     listAllDocumentMetadata(),
     listAllFileMetrics(),
     listAllCommitteeMembers(),
+    listAllCitationCounts(),
   ]);
 
   const records = allDocs.map(({ docId, metadata }) => {
@@ -528,6 +530,7 @@ export async function collectMetricsFromDb({ subjectLimit = 25 } = {}) {
       const parsed = committee.map((m) => m.name).filter(Boolean);
       if (parsed.length) rec.supervisors = dedupeSupervisorNames(parsed);
     }
+    rec.citationCount = citationCountsMap.get(docId) || 0;
     return rec;
   });
 
