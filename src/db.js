@@ -50,6 +50,19 @@ export async function listAllCommitteeMembers() {
   return map;
 }
 
+// --- Summon lookup helper ---
+
+export async function getCitationForSummon(citationId) {
+  const result = await client.execute({
+    sql: `SELECT c.citation_text, cl.query_title, cl.query_author
+          FROM citations c
+          LEFT JOIN catalogue_lookups cl ON cl.citation_id = c.id
+          WHERE c.id = ?`,
+    args: [citationId]
+  });
+  return result.rows[0] || null;
+}
+
 // --- Citation counts per document ---
 
 export async function listAllCitationCounts() {
