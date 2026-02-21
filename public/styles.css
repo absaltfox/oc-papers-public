@@ -84,6 +84,41 @@ body {
   z-index: 2;
 }
 
+/* --- Footer --- */
+
+.site-footer {
+  width: min(1200px, calc(100% - 1.2rem));
+  margin: 0 auto 2.5rem;
+  padding: 1.5rem 0 0;
+  border-top: 1px solid var(--line);
+  position: relative;
+  z-index: 2;
+}
+
+.footer-disclaimer {
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  line-height: 1.6;
+  margin: 0 0 0.75rem;
+}
+
+.footer-meta {
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  margin: 0;
+}
+
+.footer-meta a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.footer-meta a:hover {
+  text-decoration: underline;
+}
+
 /* --- Typography --- */
 
 .hero h1 {
