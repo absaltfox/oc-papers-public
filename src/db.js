@@ -1,7 +1,7 @@
 import { createClient } from '@libsql/client/web';
 import path from 'node:path';
 
-const url = process.env.TURSO_DATABASE_URL || `file:${path.join(process.cwd(), 'data', 'metrics.sqlite')}`;
+const url = (process.env.TURSO_DATABASE_URL || `file:${path.join(process.cwd(), 'data', 'metrics.sqlite')}`).trim();
 const authToken = process.env.TURSO_AUTH_TOKEN;
 
 const client = createClient({ url, authToken });

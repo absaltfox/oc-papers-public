@@ -19,6 +19,6 @@ export default async function handler(req, res) {
   } catch (err) {
     res.statusCode = 500;
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ error: err?.message, stack: err?.stack }));
+    res.end(JSON.stringify({ error: 'Failed to compute metrics' }));
   }
 }
