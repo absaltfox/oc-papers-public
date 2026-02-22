@@ -1,6 +1,7 @@
 import { getCitationForSummon } from '../../../src/db.js';
 
-const SUMMON_BASE = 'https://ubc.summon.serialssolutions.com/api/search';
+const SUMMON_API = 'https://ubc.summon.serialssolutions.com/api/search';
+const SUMMON_WEB = 'https://ubc.summon.serialssolutions.com/#!/search';
 const ILL_URL = 'https://ill-docdel.library.ubc.ca/home';
 
 function buildQuery(row) {
@@ -9,7 +10,6 @@ function buildQuery(row) {
     if (row.query_author) q += ` AND Author:(${row.query_author})`;
     return q;
   }
-  // fallback: raw citation text, truncated
   return String(row.citation_text || '').slice(0, 200);
 }
 
@@ -39,23 +39,29 @@ export default async function handler(req, res) {
   }
 
   try {
-    const url = `${SUMMON_BASE}?pn=1&l=en&include.ft.matches=t&q=${encodeURIComponent(q)}`;
-    const resp = await fetch(url, {
+    const apiUrl = `${SUMMON_API}?pn=1&l=en&include.ft.matches=t&q=${encodeURIComponent(q)}`;
+    const resp = await fetch(apiUrl, {
       headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
       signal: AbortSignal.timeout(8000),
     });
     if (!resp.ok) throw new Error(`Summon responded ${resp.status}`);
     const data = await resp.json();
 
-    const held = (data.documents || []).find((d) => d.in_holdings === true);
-    if (held) {
-      const title = String(held.title || '').replace(/<\/?mark>/g, '');
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ found: true, title, link: held.link || SUMMON_BASE }));
-    } else {
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ found: false, illUrl: ILL_URL }));
-    }
+    const results = (data.documents || []).slice(0, 10).map((d) => ({
+      title: String(d.title || '').replace(/<\/?mark>/g, ''),
+      authors: (d.authors || []).map((a) => a.fullname || a.name || '').filter(Boolean).join(', '),
+      contentType: d.content_type || '',
+      year: d.publication_date || '',
+      inHoldings: d.in_holdings === true,
+      link: d.link || '',
+      snippet: String(d.snippet || '').replace(/<\/?mark>/g, ''),
+    }));
+
+    const found = results.some((r) => r.inHoldings);
+    const searchUrl = `${SUMMON_WEB}?q=${encodeURIComponent(q)}`;
+
+    res.setHeader('content-type', 'application/json');
+    res.end(JSON.stringify({ found, results, searchUrl, illUrl: ILL_URL }));
   } catch (err) {
     res.statusCode = 502;
     res.setHeader('content-type', 'application/json');
