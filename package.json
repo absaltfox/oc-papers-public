@@ -1,6 +1,6 @@
 {
   "name": "oc-papers-public",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Read-only public view of UBC Dissertation Intelligence — powered by Turso, deployed on Vercel",
   "type": "module",
   "engines": {
