@@ -1705,6 +1705,22 @@ function topicDisplayLabel(label) {
   return cleaned || label;
 }
 
+function wrapLabel(text, maxChars) {
+  const words = text.split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if (cur && (cur.length + 1 + w.length) > maxChars) {
+      lines.push(cur);
+      cur = w;
+    } else {
+      cur = cur ? cur + ' ' + w : w;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [text];
+}
+
 function renderTopicDistribution() {
   const td = getAnalytics()?.topicData;
   if (!td || !td.topics || !td.topics.length) {
@@ -1868,7 +1884,8 @@ function renderSupervisorTopicHeatmap() {
   const headerCells = topTopics
     .map((t) => {
       const label = topicDisplayLabel(t.label);
-      return `<th class="heatmap-header heatmap-header-wrap" title="${escapeHtml(t.label)}">${escapeHtml(label)}</th>`;
+      const short = label.length > 20 ? label.slice(0, 18) + '\u2026' : label;
+      return `<th class="heatmap-header" title="${escapeHtml(label)}">${escapeHtml(short)}</th>`;
     })
     .join('');
 
@@ -2364,8 +2381,8 @@ function renderMethTopicBubble() {
   const topics = data.topics;
   const matrix = data.matrix;
 
-  const width = 940, height = 500;
-  const pad = { t: 30, r: 30, b: 80, l: 130 };
+  const width = 940, height = 540;
+  const pad = { t: 30, r: 30, b: 130, l: 130 };
   const plotW = width - pad.l - pad.r;
   const plotH = height - pad.t - pad.b;
 
@@ -2388,8 +2405,12 @@ function renderMethTopicBubble() {
   for (let ti = 0; ti < topics.length; ti++) {
     const x = pad.l + ti * colW + colW / 2;
     const label = topicDisplayLabel(topics[ti].label);
+    const lines = wrapLabel(label, 14);
+    const tspans = lines.map((line, li) =>
+      `<tspan x="${x}" dy="${li === 0 ? 0 : '1.1em'}">${escapeHtml(line)}</tspan>`
+    ).join('');
     svg += `<text class="axis" x="${x}" y="${height - pad.b + 14}" text-anchor="end"
-      transform="rotate(-35 ${x} ${height - pad.b + 14})">${escapeHtml(label.length > 22 ? label.slice(0, 20) + '\u2026' : label)}</text>`;
+      transform="rotate(-45 ${x} ${height - pad.b + 14})"><title>${escapeHtml(label)}</title>${tspans}</text>`;
   }
 
   for (let mi = 0; mi < meths.length; mi++) {

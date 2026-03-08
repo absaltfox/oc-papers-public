@@ -786,6 +786,9 @@ tbody tr:nth-child(even) {
   transform: rotate(180deg);
   white-space: nowrap;
   max-width: 2.2rem;
+  max-height: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   vertical-align: bottom;
   font-weight: 600;
   color: var(--ink-soft);
@@ -1112,6 +1115,14 @@ a:hover {
   font-size: 0.78rem;
   color: var(--ink-soft);
   cursor: pointer;
+}
+
+.scatter-legend-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .scatter-legend-item.dimmed { opacity: 0.3; }
