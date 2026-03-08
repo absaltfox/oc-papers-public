@@ -23,7 +23,36 @@ const conceptTimelineChartEl = document.getElementById('conceptTimelineChart');
 const conceptTimelineLegendEl = document.getElementById('conceptTimelineLegend');
 const methodologyConceptHeatmapEl = document.getElementById('methodologyConceptHeatmap');
 const researchGapsListEl = document.getElementById('researchGapsList');
+const supervisorTopicPanelEl = document.getElementById('supervisorTopicPanel');
+const supervisorTopicHeatmapEl = document.getElementById('supervisorTopicHeatmap');
+const topicDistPanelEl = document.getElementById('topicDistPanel');
+const topicBarsEl = document.getElementById('topicBars');
+const topicTimelinePanelEl = document.getElementById('topicTimelinePanel');
+const topicTimelineChartEl = document.getElementById('topicTimelineChart');
+const topicTimelineLegendEl = document.getElementById('topicTimelineLegend');
 const foundationalWorksListEl = document.getElementById('foundationalWorksList');
+
+// Analytics sub-tab elements
+const analyticsTabButtons = Array.from(document.querySelectorAll('.sub-tab-btn[data-analytics-tab]'));
+const topicClusterPanelEl = document.getElementById('topicClusterPanel');
+const topicClusterChartEl = document.getElementById('topicClusterChart');
+const topicClusterTooltipEl = document.getElementById('topicClusterTooltip');
+const topicClusterLegendEl = document.getElementById('topicClusterLegend');
+const topicClusterContainerEl = document.getElementById('topicClusterContainer');
+
+// Visualization panel elements
+const topicDendrogramPanelEl = document.getElementById('topicDendrogramPanel');
+const topicDendrogramChartEl = document.getElementById('topicDendrogramChart');
+const topicDendrogramTooltipEl = document.getElementById('topicDendrogramTooltip');
+const topicDendrogramContainerEl = document.getElementById('topicDendrogramContainer');
+const topicSankeyPanelEl = document.getElementById('topicSankeyPanel');
+const topicSankeyChartEl = document.getElementById('topicSankeyChart');
+const topicSankeyLegendEl = document.getElementById('topicSankeyLegend');
+const methTopicBubblePanelEl = document.getElementById('methTopicBubblePanel');
+const methTopicBubbleChartEl = document.getElementById('methTopicBubbleChart');
+const methTopicBubbleTooltipEl = document.getElementById('methTopicBubbleTooltip');
+const methTopicBubbleContainerEl = document.getElementById('methTopicBubbleContainer');
+
 const exportBibTeXBtn = document.getElementById('exportBibTeX');
 const exportRISBtn = document.getElementById('exportRIS');
 const exportCitationBibTeXBtn = document.getElementById('exportCitationBibTeX');
@@ -41,7 +70,24 @@ const citationDocsTableEl = document.getElementById('citationDocsTable');
 const citationDocFilterEl = document.getElementById('citationDocFilter');
 const citationListTitleEl = document.getElementById('citationListTitle');
 const citationEntriesEl = document.getElementById('citationEntries');
-const citationTabButtons = Array.from(document.querySelectorAll('.citation-tab-btn'));
+const citationTabButtons = Array.from(document.querySelectorAll('.sub-tab-btn[data-citation-tab]'));
+
+// Person Explorer elements
+const personTableEl = document.getElementById('personTable');
+const personDetailEl = document.getElementById('personDetail');
+const personFilterEl = document.getElementById('personFilter');
+const personRoleFilterEl = document.getElementById('personRoleFilter');
+const personCountEl = document.getElementById('personCount');
+const personSortHeaders = Array.from(document.querySelectorAll('[data-person-sort]'));
+
+// Facet filter bar
+const facetFilterBarEl    = document.getElementById('facetFilterBar');
+const filterDegreeEl      = document.getElementById('filterDegree');
+const filterProgramEl     = document.getElementById('filterProgram');
+const filterAffiliationEl = document.getElementById('filterAffiliation');
+const clearFacetsBtn      = document.getElementById('clearFacets');
+const facetCountEl        = document.getElementById('facetCount');
+const facetChipsEl        = document.getElementById('facetChips');
 
 // --- State ---
 const state = {
@@ -57,7 +103,44 @@ const state = {
   citationRequestToken: 0,
   selectedDocIds: new Set(),
   selectedCitationIds: new Set(),
+  activeFilters: { degree: '', program: '', affiliation: '' },
+  personFilterText: '',
+  personSortKey: 'docCount',
+  personSortDir: 'desc',
+  personRoleFilter: '',
+  selectedPersonKey: null,
 };
+
+let _analyticsCache = null;
+let _analyticsCacheKey = '';
+let _personListCache = null;
+let _personListCacheKey = '';
+
+// Mirrors COOCCURRENCE_BLOCKLIST in src/metrics.js — keep in sync.
+const COOCCURRENCE_BLOCKLIST = new Set([
+  'significant differences', 'statistically significant', 'significant difference',
+  'significant relationships', 'significant relationship', 'significantly related',
+  'control group', 'treatment groups', 'treatment group',
+  'experimental groups', 'experimental group', 'experimental design',
+  'randomly assigned', 'randomly selected', 'random sample',
+  'dependent variables', 'independent variables', 'dependent variable', 'independent variable',
+  'predictor variables', 'criterion variables',
+  'regression analysis', 'regression analyses', 'multiple regression', 'stepwise regression',
+  'factor analysis', 'path analysis', 'discriminant analysis', 'canonical analysis',
+  'analysis variance', 'multivariate analysis', 'repeated measures',
+  'three groups', 'two groups',
+  'results indicated', 'results showed', 'results suggest', 'results revealed',
+  'analysis revealed', 'analysis indicated', 'analyses indicated',
+  'findings indicate', 'findings indicated', 'findings suggest',
+  'data analysis', 'data collected', 'data collection', 'data gathering', 'data sources',
+  'analyzed using', 'semi structured', 'interview data',
+  'attitudes toward', 'determine whether', 'based upon', 'directed towards',
+  'further investigation', 'important factor', 'wide range',
+  'higher levels', 'high levels', 'second part', 'first part',
+  'main effects', 'significant main', 'interaction effects', 'post test',
+  'discriminant function', 'tennessee self', 'concept scale',
+  'native indian',
+]);
 
 // --- Utilities ---
 
@@ -80,6 +163,77 @@ function escapeHtml(text) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#39;');
+}
+
+function normalizeAffiliation(raw) {
+  if (!raw) return '';
+  let s = raw.trim();
+  const titles = [
+    'Associate Professor', 'Assistant Professor', 'Adjunct Professor',
+    'Full Professor', 'Professor Emerita', 'Professor Emeritus',
+    'Professor of Teaching', 'Senior Instructor', 'Senior Lecturer',
+    'Clinical Professor', 'Professor', 'Emerita', 'Emeritus', 'Dean', 'Dr\\.'
+  ];
+  const titleRe = new RegExp('(?:^|\\b)(' + titles.join('|') + ')(?:\\b|(?=\\s|,|;|$))', 'gi');
+  s = s.replace(titleRe, '');
+  s = s.replace(/\bThe University of British Columbia\b/gi, 'UBC');
+  s = s.replace(/\bUniversity of British Columbia\b/gi, 'UBC');
+  s = s.replace(/\bSimon Fraser University\b/gi, 'SFU');
+  s = s.replace(/\bUniversity of Victoria\b/gi, 'UVic');
+  s = s.replace(/\bThompson Rivers University\b/gi, 'TRU');
+  s = s.replace(/\bRoyal Roads University\b/gi, 'RRU');
+  s = s.replace(/\b(Department|Dept\.?|Faculty|School|Division|Institute|Centre|Center)\s+of\s+/gi, '');
+  s = s.replace(/\band\b/gi, '&');
+  s = s.replace(/^(UBC|SFU|UVic|TRU|RRU)\b[,;\s]*(.+)$/i, (_, inst, rest) => rest.trim() + ', ' + inst.toUpperCase());
+  s = s.replace(/\s+/g, ' ').trim();
+  s = s.replace(/^[,;\s\-–—]+|[,;\s\-–—]+$/g, '').trim();
+  s = s.replace(/\w\S*/g, w => {
+    if (/^[A-Z]{2,}$/.test(w)) return w;
+    return w.length <= 2 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  });
+  s = s.replace(/\b(And|Or|Of|In|For|The|At|By|To)\b/g, m => m.toLowerCase());
+  return s || '';
+}
+
+function mergeAffiliations(affiliations) {
+  const KNOWN_INSTITUTIONS = ['UBC', 'SFU', 'UVic', 'TRU', 'RRU'];
+  const instRe = new RegExp(',\\s*(' + KNOWN_INSTITUTIONS.join('|') + ')\\s*$', 'i');
+  const parsed = affiliations.map(a => {
+    const m = a.match(instRe);
+    const institution = m ? m[1].toUpperCase() : null;
+    const dept = m ? a.slice(0, m.index).trim() : a.trim();
+    const tokens = dept.toLowerCase().replace(/[&,]/g, ' ').split(/\s+/).filter(Boolean);
+    return { original: a, dept, institution, tokens };
+  });
+  for (const p of parsed) {
+    if (!p.institution) {
+      p.institution = 'UBC';
+      p.original = p.dept + ', UBC';
+    }
+  }
+  const deduped = new Map();
+  for (const p of parsed) {
+    const key = p.original.toLowerCase();
+    if (!deduped.has(key)) deduped.set(key, p);
+  }
+  const entries = Array.from(deduped.values());
+  const merged = [];
+  for (let i = 0; i < entries.length; i++) {
+    const a = entries[i];
+    let subsumed = false;
+    for (let j = 0; j < entries.length; j++) {
+      if (i === j) continue;
+      const b = entries[j];
+      if (a.institution !== b.institution) continue;
+      if (a.tokens.length >= b.tokens.length) continue;
+      if (a.tokens.every(t => b.tokens.includes(t))) {
+        subsumed = true;
+        break;
+      }
+    }
+    if (!subsumed) merged.push(a.original);
+  }
+  return merged.length ? merged : affiliations;
 }
 
 function setStatus(message, isError = false) {
@@ -105,6 +259,10 @@ function setActiveTab(tabName) {
   if (tabName === 'citations' && state.payload) {
     renderCitationDocs();
     setActiveCitationTab('browse');
+  }
+  if (tabName === 'people' && state.payload) {
+    renderPersonTable();
+    if (state.selectedPersonKey) renderPersonDetail(state.selectedPersonKey);
   }
 }
 
@@ -170,6 +328,20 @@ function docsForConceptTerm(term) {
   const docs = state.payload?.documents || [];
   const normalized = String(term || '').toLowerCase();
   return docs.filter((doc) => (doc.conceptTerms || []).some((t) => String(t || '').toLowerCase() === normalized));
+}
+
+function docsForTopic(topicId) {
+  const docs = state.payload?.documents || [];
+  return docs.filter((doc) => doc.topicId === topicId);
+}
+
+function getFilteredDocs() {
+  let docs = state.payload?.documents || [];
+  const { degree, program, affiliation } = state.activeFilters;
+  if (degree)      docs = docs.filter(d => d.degree === degree);
+  if (program)     docs = docs.filter(d => d.program === program);
+  if (affiliation) docs = docs.filter(d => (d.affiliation || []).some(a => normalizeAffiliation(a) === affiliation));
+  return docs;
 }
 
 function docsForMethodology(methodology) {
@@ -250,7 +422,7 @@ function docSortValue(doc, key) {
 }
 
 function getFilteredSortedDocs() {
-  let docs = state.payload?.documents || [];
+  let docs = getFilteredDocs();
 
   if (state.filterText) {
     const q = state.filterText.toLowerCase();
@@ -309,22 +481,6 @@ function renderDocuments() {
     })
     .join('');
 
-  for (const row of documentsTableEl.querySelectorAll('.doc-row')) {
-    row.addEventListener('click', (e) => {
-      if (e.target.closest('.doc-row-check')) return;
-      openRecord(row.dataset.docId, 'records');
-    });
-  }
-
-  for (const cb of documentsTableEl.querySelectorAll('.doc-row-check')) {
-    cb.addEventListener('change', () => {
-      const id = cb.dataset.checkId;
-      if (cb.checked) state.selectedDocIds.add(id);
-      else state.selectedDocIds.delete(id);
-      syncSelectAllDocs();
-    });
-  }
-
   syncSelectAllDocs();
   updateSortHeaders();
 }
@@ -376,22 +532,22 @@ function renderDetails() {
         .join('')
     : '<p class="meta">No related documents identified from overlapping themes.</p>';
 
-  let committeeHtml = '';
-  const hasSupervisorsShown = doc.supervisors?.length > 0;
   const supervisorRoles = new Set(['Supervisor', 'Co-Supervisor']);
+  let committeeHtml = '';
   if (doc.committee?.length) {
     const grouped = {};
     for (const m of doc.committee) {
       const role = m.role || 'Committee Member';
-      if (hasSupervisorsShown && supervisorRoles.has(role)) continue;
+      if (supervisorRoles.has(role)) continue;
       if (!grouped[role]) grouped[role] = [];
       grouped[role].push(m);
     }
-    committeeHtml = Object.entries(grouped).map(([role, members]) =>
-      members.map((m) =>
-        `<div class="detail-meta-label">${escapeHtml(role)}</div><div class="detail-meta-value">${escapeHtml(m.name)}${m.affiliation ? ` (${escapeHtml(m.affiliation)})` : ''}</div>`
-      ).join('')
-    ).join('');
+    committeeHtml = Object.entries(grouped).map(([role, members]) => {
+      const names = members.map((m) =>
+        `${escapeHtml(m.name)}${m.affiliation ? ` (${escapeHtml(normalizeAffiliation(m.affiliation))})` : ''}`
+      ).join(', ');
+      return `<div class="detail-meta-label">${escapeHtml(role)}</div><div class="detail-meta-value">${names}</div>`;
+    }).join('');
   }
 
   const subtitleParts = [
@@ -445,6 +601,11 @@ function renderDetails() {
       <p class="detail-section-title">Concepts</p>
       <div class="token-list">${concepts}</div>
     </div>
+    ${doc.topicId != null ? (() => {
+      const topic = state.payload?.topicData?.topics?.find((t) => t.topicId === doc.topicId);
+      const label = doc.topicId === -1 ? 'Uncategorized' : topicDisplayLabel(topic?.label || `Topic ${doc.topicId}`);
+      return `<div><p class="detail-section-title">Topic</p><div class="token-list"><span class="token topic">${escapeHtml(label)}</span></div></div>`;
+    })() : ''}
     <div>
       <p class="detail-section-title">Related Documents</p>
       <div class="related-list">${relatedHtml}</div>
@@ -506,14 +667,14 @@ function renderDetails() {
 // --- Analytics rendering ---
 
 function renderKpis() {
-  const metrics = state.payload?.metrics;
+  const metrics = getAnalytics()?.metrics;
   if (!metrics) {
     kpisEl.innerHTML = '';
     return;
   }
 
-  const docs = state.payload?.documents || [];
-  const citeCounts = docs.map((d) => d.citationCount || 0).filter((c) => c > 0);
+  const docs = getFilteredDocs();
+  const citeCounts = docs.map((d) => d.citationCount || 0).filter((c) => c >= 20);
   const citeMin = citeCounts.length ? Math.min(...citeCounts) : null;
   const citeMax = citeCounts.length ? Math.max(...citeCounts) : null;
   const citeMean = citeCounts.length
@@ -521,24 +682,34 @@ function renderKpis() {
     : null;
 
   const cards = [
-    { label: 'Retrieved Records', value: metrics.recordCount },
-    { label: 'Mean Pages', value: metrics.overallPageCount.mean },
-    { label: 'Min Pages', value: metrics.overallPageCount.min },
-    { label: 'Max Pages', value: metrics.overallPageCount.max },
-    { label: 'Mean Words', value: metrics.overallWordCount.mean },
-    { label: 'Min Words', value: metrics.overallWordCount.min },
-    { label: 'Max Words', value: metrics.overallWordCount.max },
-    { label: 'Mean Works Cited', value: citeMean },
-    { label: 'Min Works Cited', value: citeMin },
-    { label: 'Max Works Cited', value: citeMax }
+    { label: 'Dissertations', value: formatNum(metrics.recordCount) },
+    {
+      label: 'Pages',
+      value: `${formatNum(metrics.overallPageCount.min)}\u2013${formatNum(metrics.overallPageCount.max)}`,
+      range: `mean ${formatNum(metrics.overallPageCount.mean)}`
+    },
+    {
+      label: 'Words',
+      value: `${formatNum(metrics.overallWordCount.min)}\u2013${formatNum(metrics.overallWordCount.max)}`,
+      range: `mean ${formatNum(metrics.overallWordCount.mean)}`
+    }
   ];
+
+  if (citeMin != null) {
+    cards.push({
+      label: 'Works Cited',
+      value: `${formatNum(citeMin)}\u2013${formatNum(citeMax)}`,
+      range: `mean ${formatNum(citeMean)}`
+    });
+  }
 
   kpisEl.innerHTML = cards
     .map(
       (card) => `
       <article class="kpi">
         <p>${card.label}</p>
-        <strong>${formatNum(card.value)}</strong>
+        <strong>${card.value}</strong>
+        ${card.range ? `<span class="kpi-range">${card.range}</span>` : ''}
       </article>
     `
     )
@@ -546,7 +717,7 @@ function renderKpis() {
 }
 
 function renderPagesByYear() {
-  const rows = state.payload?.metrics?.avgPagesByYear || [];
+  const rows = getAnalytics()?.metrics?.avgPagesByYear || [];
   if (!rows.length) {
     pagesByYearChartEl.innerHTML = '<text x="16" y="40">No year/page data available.</text>';
     return;
@@ -589,7 +760,7 @@ function renderPagesByYear() {
 }
 
 function renderDissertationsByYear() {
-  const rows = state.payload?.metrics?.byYear || [];
+  const rows = getAnalytics()?.metrics?.byYear || [];
   if (!rows.length) {
     dissertationsByYearChartEl.innerHTML = '<text x="16" y="40">No year data available.</text>';
     return;
@@ -639,7 +810,7 @@ function renderDissertationsByYear() {
 }
 
 function renderWordsByYear() {
-  const rows = state.payload?.metrics?.byYear || [];
+  const rows = getAnalytics()?.metrics?.byYear || [];
   if (!rows.length) {
     wordsByYearChartEl.innerHTML = '<text x="16" y="40">No year/word data available.</text>';
     return;
@@ -682,7 +853,7 @@ function renderWordsByYear() {
 }
 
 function renderWordCloud() {
-  const words = state.payload?.wordCloud || [];
+  const words = getAnalytics()?.wordCloud || [];
   if (!words.length) {
     wordCloudEl.innerHTML = '<span>No theme terms available.</span>';
     themeResultsEl.innerHTML = '';
@@ -712,7 +883,7 @@ function renderWordCloud() {
 }
 
 function renderSubjectBars() {
-  const byConcept = state.payload?.metrics?.byConcept || [];
+  const byConcept = getAnalytics()?.metrics?.byConcept || [];
   if (!byConcept.length) {
     subjectBarsEl.innerHTML = '<p style="color:var(--ink-soft);font-family:var(--sans);font-size:0.85rem">No concept length data available.</p>';
     return;
@@ -736,7 +907,7 @@ function renderSubjectBars() {
 }
 
 function renderPageTrend() {
-  const rows = state.payload?.metrics?.pageTrend || [];
+  const rows = getAnalytics()?.metrics?.pageTrend || [];
   if (!rows.length) {
     pageTrendChartEl.innerHTML = '<text x="16" y="40">No page trend data available.</text>';
     return;
@@ -783,7 +954,7 @@ function renderPageTrend() {
 }
 
 function renderNgramCloud() {
-  const words = state.payload?.ngramCloud || [];
+  const words = getAnalytics()?.ngramCloud || [];
   if (!words.length) {
     ngramCloudEl.innerHTML = '<span>No n-gram data available.</span>';
     return;
@@ -808,7 +979,7 @@ function renderNgramCloud() {
 }
 
 function renderMethodologies() {
-  const items = state.payload?.methodologies || [];
+  const items = getAnalytics()?.methodologies || [];
   if (!items.length) {
     methodologyBarsEl.innerHTML = '<p style="color:var(--ink-soft);font-family:var(--sans);font-size:0.85rem">No methodology signals detected.</p>';
     return;
@@ -837,7 +1008,7 @@ function renderMethodologies() {
 }
 
 function renderCooccurrence() {
-  const pairs = state.payload?.termCooccurrence || [];
+  const pairs = getAnalytics()?.termCooccurrence || [];
   if (!pairs.length) {
     cooccurrenceBarsEl.innerHTML = '<p style="color:var(--ink-soft);font-family:var(--sans);font-size:0.85rem">No co-occurring term pairs found.</p>';
     return;
@@ -868,7 +1039,7 @@ function renderCooccurrence() {
 }
 
 function renderSupervisorHeatmap() {
-  const data = state.payload?.supervisorNgramMatrix;
+  const data = getAnalytics()?.supervisorNgramMatrix;
   if (!data || !data.supervisors.length || !data.ngrams.length) {
     supervisorHeatmapEl.innerHTML = '<p style="color:var(--ink-soft);font-family:var(--sans);font-size:0.85rem">No supervisor-term data available.</p>';
     return;
@@ -923,7 +1094,7 @@ function renderSupervisorHeatmap() {
 // --- Citation Explorer ---
 
 function renderCitationDocs() {
-  let docs = state.payload?.documents || [];
+  let docs = getFilteredDocs();
   if (state.citationFilterText) {
     const q = state.citationFilterText.toLowerCase();
     docs = docs.filter((doc) =>
@@ -1278,7 +1449,7 @@ function renderFoundationalWorks(works) {
 // --- Concept Timeline ---
 
 function renderConceptTimeline() {
-  const data = state.payload?.conceptTimeline || [];
+  const data = getAnalytics()?.conceptTimeline || [];
   if (!data.length || !conceptTimelineChartEl) {
     if (conceptTimelineChartEl) conceptTimelineChartEl.innerHTML = '<text x="16" y="40" class="axis">No concept timeline data available.</text>';
     if (conceptTimelineLegendEl) conceptTimelineLegendEl.innerHTML = '';
@@ -1406,11 +1577,14 @@ function renderSupervisorProfile(profile) {
       `).join('')
     : '<p class="meta">No dissertations found.</p>';
 
+  const topicTokens = renderTopicTokens(profile.dissertations);
+
   docDetailsEl.innerHTML = `
     <div class="meta">
       <p><strong>${escapeHtml(profile.name)}</strong></p>
       <p>${formatNum(profile.count)} dissertation(s) &middot; ${profile.yearRange}</p>
     </div>
+    ${topicTokens ? `<div><p class="detail-section-title">Topics</p><div class="token-list">${topicTokens}</div></div>` : ''}
     <div>
       <p class="detail-section-title">Top Concepts</p>
       <div class="token-list">${concepts}</div>
@@ -1455,7 +1629,7 @@ function docsForMethodologyConcept(methodology, concept) {
 }
 
 function renderMethodologyConceptMatrix() {
-  const data = state.payload?.methodologyConceptMatrix;
+  const data = getAnalytics()?.methodologyConceptMatrix;
   if (!data || !data.methodologies.length || !data.concepts.length) {
     if (methodologyConceptHeatmapEl) methodologyConceptHeatmapEl.innerHTML = '<p style="color:var(--ink-soft);font-family:var(--sans);font-size:0.85rem">No methodology-concept data available.</p>';
     return;
@@ -1503,7 +1677,7 @@ function renderMethodologyConceptMatrix() {
 // --- Research Gaps ---
 
 function renderResearchGaps() {
-  const gaps = state.payload?.researchGaps || [];
+  const gaps = getAnalytics()?.researchGaps || [];
   if (!gaps.length) {
     if (researchGapsListEl) researchGapsListEl.innerHTML = '<p style="color:var(--ink-soft);font-family:var(--sans);font-size:0.85rem">No research gap data available.</p>';
     return;
@@ -1524,6 +1698,1368 @@ function renderResearchGaps() {
   }).join('');
 }
 
+// --- Topic Distribution ---
+
+function topicDisplayLabel(label) {
+  const cleaned = label.replace(/^-?\d+_/, '').replace(/_/g, ' ');
+  return cleaned || label;
+}
+
+function renderTopicDistribution() {
+  const td = getAnalytics()?.topicData;
+  if (!td || !td.topics || !td.topics.length) {
+    if (topicDistPanelEl) topicDistPanelEl.hidden = true;
+    return;
+  }
+  topicDistPanelEl.hidden = false;
+
+  const regular = td.topics.filter((t) => t.topicId !== -1);
+  const outlier = td.topics.find((t) => t.topicId === -1);
+  const ordered = [...regular];
+  if (outlier) ordered.push(outlier);
+
+  const maxCount = Math.max(...ordered.map((t) => t.docCount), 1);
+
+  topicBarsEl.innerHTML = ordered
+    .map((topic) => {
+      const widthPct = (topic.docCount / maxCount) * 100;
+      const displayLabel = topic.topicId === -1 ? 'Uncategorized' : topicDisplayLabel(topic.label);
+      const topTerms = topic.topicId === -1 ? '' : (topic.topTerms || []).slice(0, 3).map((pair) => Array.isArray(pair) ? pair[0] : pair).join(', ');
+      return `
+        <div class="bar-row">
+          <span class="bar-label" title="${escapeHtml(topic.label)}">
+            ${escapeHtml(displayLabel)}
+            ${topTerms ? `<span class="topic-terms">${escapeHtml(topTerms)}</span>` : ''}
+          </span>
+          <div class="bar-track"><div class="bar-fill" style="width:${widthPct}%"></div></div>
+          <button class="bar-value" data-topic-id="${topic.topicId}">${formatNum(topic.docCount)}</button>
+        </div>
+      `;
+    })
+    .join('');
+
+  for (const node of topicBarsEl.querySelectorAll('[data-topic-id]')) {
+    node.addEventListener('click', () => {
+      const topicId = Number(node.getAttribute('data-topic-id'));
+      const topic = td.topics.find((t) => t.topicId === topicId);
+      const label = topicId === -1 ? 'Uncategorized' : topicDisplayLabel(topic?.label || '');
+      openMatchesModal(`Topic: ${label}`, docsForTopic(topicId));
+    });
+  }
+}
+
+function renderTopicTimeline() {
+  const td = getAnalytics()?.topicData;
+  if (!td || !td.byYear || !td.byYear.length) {
+    if (topicTimelinePanelEl) topicTimelinePanelEl.hidden = true;
+    return;
+  }
+  topicTimelinePanelEl.hidden = false;
+
+  const data = td.byYear;
+  const width = 940;
+  const height = 360;
+  const pad = { t: 20, r: 20, b: 40, l: 58 };
+
+  const allYears = new Set();
+  let maxCount = 1;
+  for (const series of data) {
+    for (const pt of series.data) {
+      allYears.add(pt.year);
+      if (pt.count > maxCount) maxCount = pt.count;
+    }
+  }
+  const years = Array.from(allYears).sort((a, b) => a - b);
+  if (!years.length) {
+    topicTimelineChartEl.innerHTML = '<text x="16" y="40" class="axis">No year data.</text>';
+    topicTimelineLegendEl.innerHTML = '';
+    return;
+  }
+
+  const minX = years[0];
+  const maxX = years[years.length - 1];
+  const x = (v) => pad.l + ((v - minX) / Math.max(maxX - minX, 1)) * (width - pad.l - pad.r);
+  const y = (v) => height - pad.b - (v / maxCount) * (height - pad.t - pad.b);
+
+  const yTicks = Array.from({ length: 6 }, (_, i) => {
+    const val = (maxCount / 5) * i;
+    return { val, y: y(val) };
+  });
+
+  const hueStep = 360 / data.length;
+  const lines = data.map((series, idx) => {
+    const hue = Math.round(idx * hueStep);
+    const color = `hsl(${hue} 65% 45%)`;
+    const points = series.data.map((pt) => `${x(pt.year)},${y(pt.count)}`).join(' ');
+    return `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" />`;
+  }).join('');
+
+  const xLabels = years
+    .filter((_, i) => i % Math.ceil(years.length / 12) === 0)
+    .map((yr) => `<text class="axis" x="${x(yr)}" y="${height - 10}" text-anchor="middle">${yr}</text>`)
+    .join('');
+
+  topicTimelineChartEl.innerHTML = `
+    ${yTicks.map((tick) => `
+      <line x1="${pad.l}" y1="${tick.y}" x2="${width - pad.r}" y2="${tick.y}" stroke="rgba(8,90,99,0.12)"/>
+      <text class="axis" x="${pad.l - 8}" y="${tick.y + 4}" text-anchor="end">${formatNum(tick.val)}</text>
+    `).join('')}
+    ${lines}
+    ${xLabels}
+  `;
+
+  topicTimelineLegendEl.innerHTML = data.map((series, idx) => {
+    const hue = Math.round(idx * hueStep);
+    const color = `hsl(${hue} 65% 45%)`;
+    const label = topicDisplayLabel(series.label);
+    return `<span class="timeline-legend-item"><span class="timeline-legend-swatch" style="background:${color}"></span>${escapeHtml(label)}</span>`;
+  }).join('');
+}
+
+function renderSupervisorTopicHeatmap() {
+  const td = getAnalytics()?.topicData;
+  if (!td || !td.topics || !td.topics.length) {
+    if (supervisorTopicPanelEl) supervisorTopicPanelEl.hidden = true;
+    return;
+  }
+
+  const docs = getFilteredDocs();
+  const supCounts = new Map();
+  const supTopicCounts = new Map();
+  for (const doc of docs) {
+    if (doc.topicId == null) continue;
+    for (const sup of (doc.supervisors || [])) {
+      supCounts.set(sup, (supCounts.get(sup) || 0) + 1);
+      if (!supTopicCounts.has(sup)) supTopicCounts.set(sup, new Map());
+      const tm = supTopicCounts.get(sup);
+      tm.set(doc.topicId, (tm.get(doc.topicId) || 0) + 1);
+    }
+  }
+
+  const topSups = Array.from(supCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([name]) => name);
+
+  const supSet = new Set(topSups);
+  const topicIdsWithSups = new Set();
+  for (const doc of docs) {
+    if (doc.topicId == null || doc.topicId === -1) continue;
+    if ((doc.supervisors || []).some((s) => supSet.has(s))) {
+      topicIdsWithSups.add(doc.topicId);
+    }
+  }
+  const topTopics = td.topics
+    .filter((t) => t.topicId !== -1 && topicIdsWithSups.has(t.topicId))
+    .slice(0, 10);
+
+  if (!topSups.length || !topTopics.length) {
+    if (supervisorTopicPanelEl) supervisorTopicPanelEl.hidden = true;
+    return;
+  }
+
+  supervisorTopicPanelEl.hidden = false;
+
+  const matrix = topSups.map((sup) =>
+    topTopics.map((topic) => (supTopicCounts.get(sup)?.get(topic.topicId) || 0))
+  );
+  const maxVal = Math.max(...matrix.flat(), 1);
+
+  const headerCells = topTopics
+    .map((t) => {
+      const label = topicDisplayLabel(t.label);
+      return `<th class="heatmap-header heatmap-header-wrap" title="${escapeHtml(t.label)}">${escapeHtml(label)}</th>`;
+    })
+    .join('');
+
+  const bodyRows = topSups
+    .map((sup, si) => {
+      const cells = topTopics
+        .map((topic, tj) => {
+          const val = matrix[si][tj];
+          const lightness = val > 0 ? 95 - Math.round((val / maxVal) * 65) : 97;
+          const textColor = lightness < 55 ? '#fff' : 'var(--ink)';
+          const content = val > 0
+            ? `<button class="heatmap-cell-btn" data-hm-sup="${escapeHtml(sup)}" data-hm-topic="${topic.topicId}" style="color:${textColor}">${val}</button>`
+            : '';
+          return `<td class="heatmap-cell" style="background:hsl(190 58% ${lightness}%);color:${textColor}">${content}</td>`;
+        })
+        .join('');
+      return `<tr><td class="heatmap-label" title="${escapeHtml(sup)}"><button class="supervisor-link" data-supervisor-name="${escapeHtml(sup)}">${escapeHtml(sup)}</button></td>${cells}</tr>`;
+    })
+    .join('');
+
+  supervisorTopicHeatmapEl.innerHTML = `
+    <table class="heatmap-table">
+      <thead><tr><th></th>${headerCells}</tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table>
+  `;
+
+  for (const node of supervisorTopicHeatmapEl.querySelectorAll('[data-hm-sup][data-hm-topic]')) {
+    node.addEventListener('click', () => {
+      const sup = node.getAttribute('data-hm-sup');
+      const topicId = Number(node.getAttribute('data-hm-topic'));
+      const topic = td.topics.find((t) => t.topicId === topicId);
+      const label = topicDisplayLabel(topic?.label || `Topic ${topicId}`);
+      const matches = docs.filter((d) =>
+        d.topicId === topicId && (d.supervisors || []).includes(sup)
+      );
+      openMatchesModal(`${sup} + ${label}`, matches);
+    });
+  }
+
+  for (const btn of supervisorTopicHeatmapEl.querySelectorAll('.supervisor-link[data-supervisor-name]')) {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSupervisorProfile(btn.dataset.supervisorName);
+    });
+  }
+}
+
+// --- Analytics sub-tabs ---
+
+function setActiveAnalyticsTab(tabName) {
+  for (const btn of analyticsTabButtons) {
+    btn.classList.toggle('active', btn.dataset.analyticsTab === tabName);
+  }
+  for (const section of document.querySelectorAll('.analytics-tab-section')) {
+    section.classList.toggle('active', section.id === `analytics-${tabName}`);
+  }
+  if (tabName === 'visualizations' && state.payload) {
+    renderTopicCluster();
+    renderTopicDendrogram();
+    renderTopicSankey();
+    renderMethTopicBubble();
+  }
+}
+
+// --- Topic Cluster Scatter Plot ---
+
+let _topicClusterRendered = false;
+let _topicClusterDocs = [];
+let _topicClusterTd = null;
+
+function renderTopicCluster() {
+  const docs = getFilteredDocs();
+  const td = getAnalytics()?.topicData;
+  if (!td?.topics?.length || !topicClusterChartEl) {
+    if (topicClusterPanelEl) topicClusterPanelEl.hidden = true;
+    return;
+  }
+
+  const plotDocs = docs.filter(d => d.umapX != null && d.umapY != null && d.topicId != null);
+  if (!plotDocs.length) {
+    topicClusterPanelEl.hidden = true;
+    return;
+  }
+  topicClusterPanelEl.hidden = false;
+
+  const width = 940, height = 600;
+  const pad = { t: 20, r: 20, b: 20, l: 20 };
+
+  const xs = plotDocs.map(d => d.umapX);
+  const ys = plotDocs.map(d => d.umapY);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+
+  const sx = v => pad.l + ((v - minX) / rangeX) * (width - pad.l - pad.r);
+  const sy = v => pad.t + ((v - minY) / rangeY) * (height - pad.t - pad.b);
+
+  const topicIds = [...new Set(plotDocs.map(d => d.topicId))].sort((a, b) => a - b);
+  const hueStep = 360 / Math.max(topicIds.length, 1);
+  const colorMap = new Map();
+  topicIds.forEach((tid, i) => {
+    colorMap.set(tid, tid === -1
+      ? 'hsl(0 0% 72%)'
+      : `hsl(${Math.round(i * hueStep)} 65% 50%)`);
+  });
+
+  const circles = plotDocs.map((doc, i) => {
+    const cx = sx(doc.umapX), cy = sy(doc.umapY);
+    const color = colorMap.get(doc.topicId) || '#999';
+    return `<circle class="cluster-dot" cx="${cx}" cy="${cy}" r="4"
+      fill="${color}" fill-opacity="0.7" stroke="${color}" stroke-opacity="0.3"
+      stroke-width="1" data-idx="${i}" data-topic="${doc.topicId}" style="cursor:pointer" />`;
+  }).join('');
+
+  topicClusterChartEl.innerHTML = circles;
+  _topicClusterDocs = plotDocs;
+  _topicClusterTd = td;
+
+  if (!_topicClusterRendered) {
+    _topicClusterRendered = true;
+
+    topicClusterChartEl.addEventListener('mouseover', e => {
+      const dot = e.target.closest('.cluster-dot');
+      if (!dot) return;
+      const doc = _topicClusterDocs[+dot.dataset.idx];
+      if (!doc) return;
+      const topic = _topicClusterTd?.topics?.find(t => t.topicId === doc.topicId);
+      const label = doc.topicId === -1 ? 'Uncategorized' : topicDisplayLabel(topic?.label || '');
+      topicClusterTooltipEl.hidden = false;
+      topicClusterTooltipEl.innerHTML = `
+        <div class="tooltip-title">${escapeHtml((doc.title || '').slice(0, 100))}</div>
+        <div class="tooltip-meta">${doc.year || '\u2014'} \u00B7 ${escapeHtml(label)}</div>
+      `;
+      const rect = topicClusterContainerEl.getBoundingClientRect();
+      const dotRect = dot.getBoundingClientRect();
+      topicClusterTooltipEl.style.left = (dotRect.left - rect.left + 12) + 'px';
+      topicClusterTooltipEl.style.top = (dotRect.top - rect.top - 10) + 'px';
+    });
+
+    topicClusterChartEl.addEventListener('mouseout', e => {
+      if (e.target.closest('.cluster-dot')) topicClusterTooltipEl.hidden = true;
+    });
+
+    topicClusterChartEl.addEventListener('click', e => {
+      const dot = e.target.closest('.cluster-dot');
+      if (!dot) return;
+      const doc = _topicClusterDocs[+dot.dataset.idx];
+      if (!doc) return;
+      state.selectedDocId = doc.id;
+      renderDetails();
+      docModalOverlay.hidden = false;
+    });
+  }
+
+  const activeTids = new Set(topicIds);
+  const legendItems = topicIds.map(tid => {
+    const topic = td.topics.find(t => t.topicId === tid);
+    const label = tid === -1 ? 'Uncategorized' : topicDisplayLabel(topic?.label || `Topic ${tid}`);
+    const color = colorMap.get(tid);
+    const count = plotDocs.filter(d => d.topicId === tid).length;
+    return `<span class="scatter-legend-item" data-legend-tid="${tid}">
+      <span class="scatter-legend-swatch" style="background:${color}"></span>
+      ${escapeHtml(label)} (${count})
+    </span>`;
+  }).join('');
+  topicClusterLegendEl.innerHTML = legendItems;
+
+  topicClusterLegendEl.onclick = e => {
+    const item = e.target.closest('.scatter-legend-item');
+    if (!item) return;
+    const tid = Number(item.dataset.legendTid);
+    if (activeTids.has(tid)) {
+      activeTids.delete(tid);
+      item.classList.add('dimmed');
+    } else {
+      activeTids.add(tid);
+      item.classList.remove('dimmed');
+    }
+    for (const dot of topicClusterChartEl.querySelectorAll('.cluster-dot')) {
+      const dotTid = Number(dot.dataset.topic);
+      dot.setAttribute('fill-opacity', activeTids.has(dotTid) ? '0.7' : '0.05');
+      dot.setAttribute('stroke-opacity', activeTids.has(dotTid) ? '0.3' : '0.02');
+    }
+  };
+}
+
+// --- Network graph tooltip helper ---
+
+function showNetTooltip(containerEl, tooltipEl, target, html) {
+  tooltipEl.hidden = false;
+  tooltipEl.innerHTML = html;
+  const rect = containerEl.getBoundingClientRect();
+  const tRect = target.getBoundingClientRect();
+  let left = tRect.left - rect.left + 14;
+  let top = tRect.top - rect.top - 10;
+  if (left + 200 > rect.width) left = tRect.left - rect.left - 200;
+  if (top < 0) top = tRect.bottom - rect.top + 6;
+  tooltipEl.style.left = left + 'px';
+  tooltipEl.style.top = top + 'px';
+}
+
+// --- Topic Hierarchy Dendrogram ---
+
+let _topicDendrogramRendered = false;
+
+function renderTopicDendrogram() {
+  const td = getAnalytics()?.topicData;
+  if (!td?.topics?.length || !topicDendrogramChartEl) {
+    if (topicDendrogramPanelEl) topicDendrogramPanelEl.hidden = true;
+    return;
+  }
+
+  const hierarchy = td.hierarchy;
+  if (!hierarchy?.linkage?.length || !hierarchy?.leafTopicIds?.length) {
+    topicDendrogramPanelEl.hidden = true;
+    return;
+  }
+
+  const topicMap = new Map(td.topics.map(t => [t.topicId, t]));
+  const leafTopicIds = hierarchy.leafTopicIds;
+  const leafTopics = leafTopicIds.map(id => topicMap.get(id)).filter(Boolean);
+
+  if (leafTopics.length < 2) {
+    topicDendrogramPanelEl.hidden = true;
+    return;
+  }
+  topicDendrogramPanelEl.hidden = false;
+
+  if (_topicDendrogramRendered) return;
+  _topicDendrogramRendered = true;
+
+  const N = leafTopicIds.length;
+  const linkageRows = hierarchy.linkage;
+
+  const nodes = [];
+  for (let i = 0; i < N; i++) {
+    const topic = topicMap.get(leafTopicIds[i]);
+    nodes.push({ leaf: true, topic, topicIdx: i });
+  }
+  for (let i = 0; i < linkageRows.length; i++) {
+    const [a, b, dist] = linkageRows[i];
+    nodes.push({
+      leaf: false,
+      left: nodes[Math.round(a)],
+      right: nodes[Math.round(b)],
+      distance: dist,
+    });
+  }
+  const root = nodes[nodes.length - 1];
+
+  const nLeavesEst = leafTopicIds.length;
+  const width = 940, height = Math.max(400, nLeavesEst * 32 + 60);
+  const pad = { t: 30, r: 220, b: 30, l: 40 };
+  const plotW = width - pad.l - pad.r;
+  const plotH = height - pad.t - pad.b;
+
+  topicDendrogramChartEl.setAttribute('viewBox', `0 0 ${width} ${height}`);
+
+  function maxDist(node) {
+    if (node.leaf) return 0;
+    return Math.max(node.distance, maxDist(node.left), maxDist(node.right));
+  }
+  const dMax = maxDist(root) || 1;
+
+  function leafCount(node) {
+    if (node.leaf) return 1;
+    return leafCount(node.left) + leafCount(node.right);
+  }
+  const nLeaves = leafCount(root);
+  const leafSpacing = plotH / (nLeaves - 1 || 1);
+
+  let leafIdx = 0;
+  function assignLeafY(node) {
+    if (node.leaf) {
+      node.y = pad.t + leafIdx * leafSpacing;
+      leafIdx++;
+      return;
+    }
+    assignLeafY(node.left);
+    assignLeafY(node.right);
+    node.y = (node.left.y + node.right.y) / 2;
+  }
+  assignLeafY(root);
+
+  function assignX(node) {
+    if (node.leaf) {
+      node.x = pad.l + plotW;
+      return;
+    }
+    assignX(node.left);
+    assignX(node.right);
+    node.x = pad.l + plotW * (1 - node.distance / dMax);
+  }
+  assignX(root);
+
+  const lines = [];
+  const leaves = [];
+  function collectDrawables(node) {
+    if (node.leaf) {
+      leaves.push(node);
+      return;
+    }
+    collectDrawables(node.left);
+    collectDrawables(node.right);
+    lines.push(
+      `<line x1="${node.left.x}" y1="${node.left.y}" x2="${node.x}" y2="${node.left.y}" stroke="#7c8a97" stroke-width="1.5"/>`,
+      `<line x1="${node.right.x}" y1="${node.right.y}" x2="${node.x}" y2="${node.right.y}" stroke="#7c8a97" stroke-width="1.5"/>`,
+      `<line x1="${node.x}" y1="${node.left.y}" x2="${node.x}" y2="${node.right.y}" stroke="#7c8a97" stroke-width="1.5"/>`
+    );
+  }
+  collectDrawables(root);
+
+  const hueStep = 360 / Math.max(leaves.length, 1);
+  const docCounts = leaves.map(l => l.topic.docCount);
+  const minDoc = Math.min(...docCounts);
+  const maxDoc = Math.max(...docCounts);
+  const rMin = 5, rMax = 12;
+
+  function circleR(dc) {
+    if (maxDoc === minDoc) return (rMin + rMax) / 2;
+    return rMin + (dc - minDoc) / (maxDoc - minDoc) * (rMax - rMin);
+  }
+
+  const leafSvg = leaves.map((l, i) => {
+    const r = circleR(l.topic.docCount);
+    const color = `hsl(${Math.round(i * hueStep)} 65% 50%)`;
+    const label = topicDisplayLabel(l.topic.label);
+    const truncLabel = label.length > 28 ? label.slice(0, 26) + '\u2026' : label;
+    return `<circle cx="${l.x}" cy="${l.y}" r="${r}" fill="${color}" stroke="#fff" stroke-width="1.5"
+              data-dendro-idx="${i}" style="cursor:pointer"/>
+            <text x="${l.x + r + 6}" y="${l.y}" dy="0.35em" font-size="11" fill="var(--fg)"
+              data-dendro-idx="${i}" style="cursor:pointer">${escapeHtml(truncLabel)}</text>`;
+  });
+
+  topicDendrogramChartEl.innerHTML = lines.join('') + leafSvg.join('');
+
+  const container = topicDendrogramContainerEl;
+  const tooltip = topicDendrogramTooltipEl;
+  const chart = topicDendrogramChartEl;
+
+  chart.addEventListener('mouseover', (e) => {
+    const el = e.target.closest('[data-dendro-idx]');
+    if (!el) return;
+    const idx = +el.dataset.dendroIdx;
+    const leaf = leaves[idx];
+    if (!leaf) return;
+    const t = leaf.topic;
+    const label = topicDisplayLabel(t.label);
+    const terms = (t.topTerms || []).slice(0, 5).map(p => p[0]).join(', ');
+    tooltip.innerHTML = `<strong>${escapeHtml(label)}</strong>
+      <div class="tooltip-meta">${t.docCount} dissertation(s)</div>
+      <div class="tooltip-meta" style="margin-top:2px">Top terms: ${escapeHtml(terms)}</div>`;
+    tooltip.hidden = false;
+    const rect = container.getBoundingClientRect();
+    const svgRect = chart.getBoundingClientRect();
+    const scale = svgRect.width / 940;
+    const cx = leaf.x * scale + svgRect.left - rect.left;
+    const cy = leaf.y * scale + svgRect.top - rect.top;
+    tooltip.style.left = `${cx + 15}px`;
+    tooltip.style.top = `${cy - 10}px`;
+  });
+  chart.addEventListener('mouseout', (e) => {
+    const el = e.target.closest('[data-dendro-idx]');
+    if (el) tooltip.hidden = true;
+  });
+  chart.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-dendro-idx]');
+    if (!el) return;
+    const idx = +el.dataset.dendroIdx;
+    const leaf = leaves[idx];
+    if (!leaf) return;
+    const t = leaf.topic;
+    const label = topicDisplayLabel(t.label);
+    openMatchesModal(`Topic: ${label}`, docsForTopic(t.topicId));
+  });
+}
+
+// --- Topic Evolution Sankey ---
+
+function renderTopicSankey() {
+  const td = getAnalytics()?.topicData;
+  if (!td?.byYear?.length || !topicSankeyChartEl) {
+    if (topicSankeyPanelEl) topicSankeyPanelEl.hidden = true;
+    return;
+  }
+  topicSankeyPanelEl.hidden = false;
+
+  const byYear = td.byYear;
+  const topics = td.topics?.filter(t => t.topicId !== -1).slice(0, 8) || [];
+  if (!topics.length) { topicSankeyPanelEl.hidden = true; return; }
+
+  const allYears = new Set();
+  for (const t of byYear) {
+    for (const d of t.data) allYears.add(d.year);
+  }
+  const sortedYears = Array.from(allYears).sort((a, b) => a - b);
+  if (sortedYears.length < 2) { topicSankeyPanelEl.hidden = true; return; }
+
+  const minYear = sortedYears[0];
+  const maxYear = sortedYears[sortedYears.length - 1];
+  const binSize = 5;
+  const periods = [];
+  for (let y = minYear; y <= maxYear; y += binSize) {
+    const end = Math.min(y + binSize - 1, maxYear);
+    periods.push({ start: y, end, label: `${y}\u2013${end}` });
+  }
+
+  const topicPeriods = byYear.map(t => {
+    const yearMap = new Map(t.data.map(d => [d.year, d.count]));
+    return {
+      topicId: t.topicId,
+      label: t.label,
+      counts: periods.map(p => {
+        let sum = 0;
+        for (let y = p.start; y <= p.end; y++) sum += (yearMap.get(y) || 0);
+        return sum;
+      })
+    };
+  });
+
+  const width = 940, height = 500;
+  const pad = { t: 30, r: 30, b: 40, l: 30 };
+  const colWidth = (width - pad.l - pad.r) / Math.max(periods.length - 1, 1);
+
+  const hueStep = 360 / Math.max(topicPeriods.length, 1);
+  const colorForIdx = i => `hsl(${Math.round(i * hueStep)} 60% 50%)`;
+
+  const periodTotals = periods.map((_, pi) => topicPeriods.reduce((s, t) => s + t.counts[pi], 0));
+  const maxTotal = Math.max(...periodTotals, 1);
+  const availH = height - pad.t - pad.b;
+
+  const stacks = periods.map((_, pi) => {
+    const total = periodTotals[pi];
+    const scale = total > 0 ? availH / maxTotal : 0;
+    let y0 = pad.t + (availH - total * scale) / 2;
+    return topicPeriods.map((t) => {
+      const h = t.counts[pi] * scale;
+      const entry = { y: y0, h };
+      y0 += h;
+      return entry;
+    });
+  });
+
+  let svg = '';
+
+  for (let pi = 0; pi < periods.length - 1; pi++) {
+    const x1 = pad.l + pi * colWidth;
+    const x2 = pad.l + (pi + 1) * colWidth;
+    for (let ti = 0; ti < topicPeriods.length; ti++) {
+      const s = stacks[pi][ti];
+      const e = stacks[pi + 1][ti];
+      if (s.h < 0.5 && e.h < 0.5) continue;
+      const color = colorForIdx(ti);
+      svg += `<path d="M${x1},${s.y} C${(x1 + x2) / 2},${s.y} ${(x1 + x2) / 2},${e.y} ${x2},${e.y}
+        L${x2},${e.y + e.h} C${(x1 + x2) / 2},${e.y + e.h} ${(x1 + x2) / 2},${s.y + s.h} ${x1},${s.y + s.h} Z"
+        fill="${color}" fill-opacity="0.55" stroke="${color}" stroke-opacity="0.3" stroke-width="0.5" />`;
+    }
+  }
+
+  for (let pi = 0; pi < periods.length; pi++) {
+    const x = pad.l + pi * colWidth;
+    svg += `<text class="axis" x="${x}" y="${height - 10}" text-anchor="middle">${periods[pi].label}</text>`;
+  }
+
+  topicSankeyChartEl.innerHTML = svg;
+
+  topicSankeyLegendEl.innerHTML = topicPeriods.map((t, i) => {
+    const label = topicDisplayLabel(t.label);
+    return `<span class="scatter-legend-item">
+      <span class="scatter-legend-swatch" style="background:${colorForIdx(i)}"></span>
+      ${escapeHtml(label)}
+    </span>`;
+  }).join('');
+}
+
+// --- Methodology x Topic Bubble Chart ---
+
+let _methTopicRendered = false;
+let _methTopicData = null;
+
+function renderMethTopicBubble() {
+  const data = getAnalytics()?.methodologyTopicMatrix;
+  if (!data?.methodologies?.length || !data?.topics?.length || !methTopicBubbleChartEl) {
+    if (methTopicBubblePanelEl) methTopicBubblePanelEl.hidden = true;
+    return;
+  }
+  methTopicBubblePanelEl.hidden = false;
+  _methTopicData = data;
+
+  const meths = data.methodologies;
+  const topics = data.topics;
+  const matrix = data.matrix;
+
+  const width = 940, height = 500;
+  const pad = { t: 30, r: 30, b: 80, l: 130 };
+  const plotW = width - pad.l - pad.r;
+  const plotH = height - pad.t - pad.b;
+
+  const colW = plotW / Math.max(topics.length, 1);
+  const rowH = plotH / Math.max(meths.length, 1);
+
+  let maxVal = 0;
+  for (const row of matrix) for (const v of row) if (v > maxVal) maxVal = v;
+  const maxR = Math.min(colW, rowH) / 2.5;
+
+  const hueStep = 360 / Math.max(topics.length, 1);
+
+  let svg = '';
+
+  for (let mi = 0; mi < meths.length; mi++) {
+    const y = pad.t + mi * rowH + rowH / 2;
+    svg += `<text class="axis" x="${pad.l - 8}" y="${y + 3}" text-anchor="end">${escapeHtml(meths[mi])}</text>`;
+  }
+
+  for (let ti = 0; ti < topics.length; ti++) {
+    const x = pad.l + ti * colW + colW / 2;
+    const label = topicDisplayLabel(topics[ti].label);
+    svg += `<text class="axis" x="${x}" y="${height - pad.b + 14}" text-anchor="end"
+      transform="rotate(-35 ${x} ${height - pad.b + 14})">${escapeHtml(label.length > 22 ? label.slice(0, 20) + '\u2026' : label)}</text>`;
+  }
+
+  for (let mi = 0; mi < meths.length; mi++) {
+    for (let ti = 0; ti < topics.length; ti++) {
+      const val = matrix[mi][ti];
+      if (!val) continue;
+      const cx = pad.l + ti * colW + colW / 2;
+      const cy = pad.t + mi * rowH + rowH / 2;
+      const r = Math.max(3, Math.sqrt(val / Math.max(maxVal, 1)) * maxR);
+      const hue = Math.round(ti * hueStep);
+      svg += `<circle class="net-node" cx="${cx}" cy="${cy}" r="${r}"
+        fill="hsl(${hue} 55% 52%)" fill-opacity="0.65" stroke="hsl(${hue} 55% 40%)" stroke-width="1"
+        data-mi="${mi}" data-ti="${ti}" />`;
+    }
+  }
+
+  methTopicBubbleChartEl.innerHTML = svg;
+
+  if (!_methTopicRendered) {
+    _methTopicRendered = true;
+
+    methTopicBubbleChartEl.addEventListener('mouseover', e => {
+      const node = e.target.closest('.net-node');
+      if (!node) return;
+      const d = _methTopicData;
+      if (!d) return;
+      const mi = +node.dataset.mi;
+      const ti = +node.dataset.ti;
+      const val = d.matrix[mi]?.[ti] || 0;
+      showNetTooltip(methTopicBubbleContainerEl, methTopicBubbleTooltipEl, node,
+        `<div class="tooltip-title">${escapeHtml(d.methodologies[mi])}</div>
+         <div class="tooltip-meta">${escapeHtml(topicDisplayLabel(d.topics[ti]?.label || ''))} \u00B7 ${val} dissertation(s)</div>`);
+    });
+
+    methTopicBubbleChartEl.addEventListener('mouseout', e => {
+      if (e.target.closest('.net-node')) methTopicBubbleTooltipEl.hidden = true;
+    });
+
+    methTopicBubbleChartEl.addEventListener('click', e => {
+      const node = e.target.closest('.net-node');
+      if (!node) return;
+      const d = _methTopicData;
+      if (!d) return;
+      const mi = +node.dataset.mi;
+      const ti = +node.dataset.ti;
+      const meth = d.methodologies[mi];
+      const topicId = d.topics[ti]?.topicId;
+      const docs = state.payload?.documents || [];
+      const matches = docs.filter(doc =>
+        (doc.methodologies || []).includes(meth) && doc.topicId === topicId
+      );
+      openMatchesModal(`${meth} + ${topicDisplayLabel(d.topics[ti]?.label || '')}`, matches);
+    });
+  }
+}
+
+// --- Topic summary helpers for supervisor profiles ---
+
+function buildTopicSummary(docs) {
+  const topicCounts = new Map();
+  for (const doc of docs) {
+    if (doc.topicId == null) continue;
+    topicCounts.set(doc.topicId, (topicCounts.get(doc.topicId) || 0) + 1);
+  }
+  const topics = state.payload?.topicData?.topics || [];
+  return Array.from(topicCounts.entries())
+    .map(([topicId, count]) => {
+      const topic = topics.find((t) => t.topicId === topicId);
+      const label = topicId === -1 ? 'Uncategorized' : topicDisplayLabel(topic?.label || `Topic ${topicId}`);
+      return { topicId, label, count };
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+function renderTopicTokens(docs) {
+  const summary = buildTopicSummary(docs);
+  if (!summary.length) return '';
+  return summary.map((t) =>
+    `<span class="token topic">${escapeHtml(t.label)} (${t.count})</span>`
+  ).join('');
+}
+
+// --- Person Explorer ---
+
+function isValidPersonName(name) {
+  if (!name) return false;
+  const n = name.trim();
+  if (n.length < 3) return false;
+  const words = n.split(/\s+/);
+  if (words.length < 2) return false;
+  if (/^(University|UBC|SFU|Columbia|of\s|&\s|Research$)/i.test(n)) return false;
+  if (words.every(w => w.replace(/\./g, '').length <= 2)) return false;
+  return true;
+}
+
+function buildPersonList(docs) {
+  const people = new Map();
+
+  for (const doc of docs) {
+    const docPersonKeys = new Set();
+
+    for (const name of (doc.supervisors || [])) {
+      if (!isValidPersonName(name)) continue;
+      const key = name.toLowerCase().trim();
+      if (!key) continue;
+      docPersonKeys.add(key);
+      let person = people.get(key);
+      if (!person) {
+        person = { name, roles: new Set(), docs: [], affiliations: new Set(), conceptMap: new Map(), methMap: new Map(), coSupervisors: new Set() };
+        people.set(key, person);
+      }
+      person.roles.add('Supervisor');
+      person.docs.push(doc);
+      for (const c of (doc.conceptTerms || [])) person.conceptMap.set(c, (person.conceptMap.get(c) || 0) + 1);
+      for (const m of (doc.methodologies || [])) person.methMap.set(m, (person.methMap.get(m) || 0) + 1);
+      for (const other of (doc.supervisors || [])) {
+        const otherKey = other.toLowerCase().trim();
+        if (otherKey && otherKey !== key) person.coSupervisors.add(other);
+      }
+    }
+
+    for (const member of (doc.committee || [])) {
+      const name = member.name;
+      if (!isValidPersonName(name)) continue;
+      const key = name.toLowerCase().trim();
+      if (!key) continue;
+      let person = people.get(key);
+      if (!person) {
+        person = { name, roles: new Set(), docs: [], affiliations: new Set(), conceptMap: new Map(), methMap: new Map(), coSupervisors: new Set() };
+        people.set(key, person);
+      }
+      const role = member.role || 'Committee Member';
+      person.roles.add(role);
+      if (member.affiliation) {
+        const norm = normalizeAffiliation(member.affiliation);
+        if (norm) person.affiliations.add(norm);
+      }
+      if (!docPersonKeys.has(key)) {
+        person.docs.push(doc);
+        for (const c of (doc.conceptTerms || [])) person.conceptMap.set(c, (person.conceptMap.get(c) || 0) + 1);
+        for (const m of (doc.methodologies || [])) person.methMap.set(m, (person.methMap.get(m) || 0) + 1);
+      }
+      docPersonKeys.add(key);
+    }
+  }
+
+  const result = [];
+  for (const [key, p] of people) {
+    const years = p.docs.map(d => d.year).filter(Boolean).sort((a, b) => a - b);
+    const topConcepts = Array.from(p.conceptMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([term, count]) => ({ term, count }));
+    const methodologies = Array.from(p.methMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([methodology, count]) => ({ methodology, count }));
+    result.push({
+      key,
+      name: p.name,
+      roles: Array.from(p.roles),
+      docCount: p.docs.length,
+      docs: p.docs,
+      affiliations: mergeAffiliations(Array.from(p.affiliations)),
+      yearRange: years.length ? `${years[0]}\u2013${years[years.length - 1]}` : '\u2013',
+      yearMin: years[0] || 9999,
+      topConcepts,
+      methodologies,
+      coSupervisors: Array.from(p.coSupervisors),
+    });
+  }
+
+  return result;
+}
+
+function getPersonList() {
+  if (!state.payload) return [];
+  const { degree, program, affiliation } = state.activeFilters;
+  const key = `${degree}\0${program}\0${affiliation}`;
+  if (_personListCache && _personListCacheKey === key) return _personListCache;
+  _personListCache = buildPersonList(getFilteredDocs());
+  _personListCacheKey = key;
+  return _personListCache;
+}
+
+function renderPersonTable() {
+  if (!personTableEl) return;
+  let people = getPersonList();
+
+  if (state.personRoleFilter) {
+    people = people.filter(p => p.roles.includes(state.personRoleFilter));
+  }
+
+  if (state.personFilterText) {
+    const q = state.personFilterText.toLowerCase();
+    people = people.filter(p =>
+      p.name.toLowerCase().includes(q) ||
+      p.roles.some(r => r.toLowerCase().includes(q)) ||
+      p.affiliations.some(a => a.toLowerCase().includes(q))
+    );
+  }
+
+  const dir = state.personSortDir === 'asc' ? 1 : -1;
+  people = [...people].sort((a, b) => {
+    switch (state.personSortKey) {
+      case 'name': {
+        const cmp = a.name.localeCompare(b.name);
+        return cmp * dir;
+      }
+      case 'docCount': {
+        const cmp = a.docCount - b.docCount || a.name.localeCompare(b.name);
+        return cmp * dir;
+      }
+      case 'roles': {
+        const cmp = a.roles.join(', ').localeCompare(b.roles.join(', '));
+        return cmp * dir;
+      }
+      case 'years': {
+        const cmp = a.yearMin - b.yearMin || a.name.localeCompare(b.name);
+        return cmp * dir;
+      }
+      default: return 0;
+    }
+  });
+
+  for (const th of personSortHeaders) {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.dataset.personSort === state.personSortKey) {
+      th.classList.add(state.personSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+  }
+
+  personTableEl.innerHTML = people.map(p => `
+    <tr class="doc-row${state.selectedPersonKey === p.key ? ' active' : ''}" data-person-key="${escapeHtml(p.key)}">
+      <td>${escapeHtml(p.name)}</td>
+      <td>${p.docCount}</td>
+      <td><div class="token-list">${p.roles.map(r => `<span class="token">${escapeHtml(r)}</span>`).join('')}</div></td>
+      <td>${escapeHtml(p.yearRange)}</td>
+    </tr>
+  `).join('');
+
+  personCountEl.textContent = `${people.length} ${people.length === 1 ? 'person' : 'people'}`;
+}
+
+function renderPersonDetail(personKey) {
+  if (!personDetailEl) return;
+  const people = getPersonList();
+  const person = people.find(p => p.key === personKey);
+  if (!person) {
+    personDetailEl.innerHTML = '<p class="meta">Select a person to view their profile.</p>';
+    return;
+  }
+
+  const concepts = person.topConcepts.length
+    ? person.topConcepts.map(c => `<span class="token concept clickable" data-person-concept="${escapeHtml(c.term)}">${escapeHtml(c.term)} (${c.count})</span>`).join('')
+    : '<span class="token">No concepts</span>';
+
+  const maxMeth = Math.max(...person.methodologies.map(m => m.count), 1);
+  const methBars = person.methodologies.length
+    ? person.methodologies.map(m => {
+        const widthPct = (m.count / maxMeth) * 100;
+        return `
+          <div class="bar-row">
+            <span class="bar-label">${escapeHtml(m.methodology)}</span>
+            <div class="bar-track"><div class="bar-fill" style="width:${widthPct}%"></div></div>
+            <span class="bar-value">${formatNum(m.count)}</span>
+          </div>
+        `;
+      }).join('')
+    : '<p class="meta">No methodology signals.</p>';
+
+  const rolesHtml = person.roles.map(r => `<span class="token">${escapeHtml(r)}</span>`).join(' ');
+  const affiliationsHtml = person.affiliations.length
+    ? person.affiliations.map(a => `<span class="token">${escapeHtml(a)}</span>`).join(' ')
+    : '';
+
+  const coSupHtml = person.coSupervisors.length
+    ? person.coSupervisors.map(name =>
+        `<button class="supervisor-link" data-person-nav="${escapeHtml(name.toLowerCase().trim())}">${escapeHtml(name)}</button>`
+      ).join(', ')
+    : '';
+
+  const dissertationList = person.docs.length
+    ? person.docs.map(doc => `
+        <div class="related-item" data-related-id="${escapeHtml(doc.id)}">
+          <strong>${escapeHtml(doc.title || '(Untitled)')}</strong>
+          <p>${escapeHtml(doc.author || 'Unknown')} &middot; ${doc.year || '-'} &middot; ${escapeHtml(doc.degree || '-')}</p>
+        </div>
+      `).join('')
+    : '<p class="meta">No dissertations found.</p>';
+
+  personDetailEl.innerHTML = `
+    <h2 style="margin-bottom:0.3rem">${escapeHtml(person.name)}</h2>
+    <div class="meta">
+      <p>${formatNum(person.docCount)} dissertation(s) &middot; ${person.yearRange}</p>
+    </div>
+    <div class="detail-body">
+      <div>
+        <p class="detail-section-title">Roles</p>
+        <div class="token-list">${rolesHtml}</div>
+      </div>
+      ${affiliationsHtml ? `<div><p class="detail-section-title">Affiliations</p><div class="token-list">${affiliationsHtml}</div></div>` : ''}
+      ${(() => {
+        const summary = buildTopicSummary(person.docs);
+        if (!summary.length) return '';
+        const tt = summary.map(t =>
+          `<span class="token topic clickable" data-person-topic="${t.topicId}">${escapeHtml(t.label)} (${t.count})</span>`
+        ).join('');
+        return `<div><p class="detail-section-title">Topics</p><div class="token-list">${tt}</div></div>`;
+      })()}
+      <div>
+        <p class="detail-section-title">Top Concepts</p>
+        <div class="token-list">${concepts}</div>
+      </div>
+      <div>
+        <p class="detail-section-title">Methodologies</p>
+        <div class="bars">${methBars}</div>
+      </div>
+      ${coSupHtml ? `<div><p class="detail-section-title">Co-Supervisors</p><div class="token-list">${coSupHtml}</div></div>` : ''}
+      <div>
+        <p class="detail-section-title">Dissertations</p>
+        <div class="related-list">${dissertationList}</div>
+      </div>
+    </div>
+  `;
+
+  for (const item of personDetailEl.querySelectorAll('.related-item[data-related-id]')) {
+    item.addEventListener('click', () => {
+      const targetId = item.getAttribute('data-related-id');
+      if (targetId) openRecord(targetId, 'records');
+    });
+  }
+
+  for (const link of personDetailEl.querySelectorAll('[data-person-nav]')) {
+    link.addEventListener('click', () => {
+      const targetKey = link.getAttribute('data-person-nav');
+      if (targetKey) openPersonProfile(targetKey);
+    });
+  }
+
+  for (const pill of personDetailEl.querySelectorAll('[data-person-concept]')) {
+    pill.style.cursor = 'pointer';
+    pill.addEventListener('click', () => {
+      const term = pill.getAttribute('data-person-concept');
+      const matches = person.docs.filter(d => (d.conceptTerms || []).includes(term));
+      openMatchesModal(`${person.name} — "${term}"`, matches);
+    });
+  }
+
+  for (const pill of personDetailEl.querySelectorAll('[data-person-topic]')) {
+    pill.style.cursor = 'pointer';
+    pill.addEventListener('click', () => {
+      const topicId = Number(pill.getAttribute('data-person-topic'));
+      const matches = person.docs.filter(d => d.topicId === topicId);
+      const label = pill.textContent.replace(/\s*\(\d+\)\s*$/, '');
+      openMatchesModal(`${person.name} — ${label}`, matches);
+    });
+  }
+}
+
+function openPersonProfile(nameOrKey) {
+  state.selectedPersonKey = nameOrKey.toLowerCase().trim();
+  setActiveTab('people');
+  renderPersonTable();
+  renderPersonDetail(state.selectedPersonKey);
+  const activeRow = personTableEl?.querySelector('.doc-row.active');
+  if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
+}
+
+// --- Facet filter helpers ---
+
+function updateFacetCount() {
+  const total    = state.payload?.documents?.length || 0;
+  const filtered = getFilteredDocs().length;
+  const { degree, program, affiliation } = state.activeFilters;
+  const active = !!(degree || program || affiliation);
+
+  facetCountEl.textContent = active ? `${formatNum(filtered)} of ${formatNum(total)}` : '';
+  clearFacetsBtn.style.display = active ? '' : 'none';
+
+  filterDegreeEl.classList.toggle('is-active', !!degree);
+  filterProgramEl.classList.toggle('is-active', !!program);
+  filterAffiliationEl.classList.toggle('is-active', !!affiliation);
+
+  const chips = [
+    { key: 'degree',      dim: 'Degree',      value: degree },
+    { key: 'program',     dim: 'Program',     value: program },
+    { key: 'affiliation', dim: 'Affiliation', value: affiliation },
+  ].filter(c => c.value);
+  facetChipsEl.innerHTML = chips.map(c =>
+    `<span class="facet-chip">` +
+      `<span class="facet-chip-dim">${escapeHtml(c.dim)}</span> ${escapeHtml(c.value)}` +
+      `<button class="facet-chip-remove" data-chip-key="${c.key}" aria-label="Remove ${escapeHtml(c.dim)} filter">&times;</button>` +
+    `</span>`
+  ).join('');
+}
+
+function populateFacetFilters() {
+  const docs = state.payload?.documents || [];
+  const degrees      = [...new Set(docs.map(d => d.degree).filter(Boolean))].sort();
+  const programs     = [...new Set(docs.map(d => d.program).filter(Boolean))].sort();
+  const affiliations = [...new Set(docs.flatMap(d => d.affiliation || []).map(normalizeAffiliation).filter(Boolean))].sort();
+
+  const populate = (el, values, allLabel) => {
+    el.innerHTML = `<option value="">${allLabel}</option>` +
+      values.map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    el.value = '';
+  };
+  populate(filterDegreeEl,      degrees,      'All');
+  populate(filterProgramEl,     programs,     'All');
+  populate(filterAffiliationEl, affiliations, 'All');
+
+  state.activeFilters = { degree: '', program: '', affiliation: '' };
+  facetFilterBarEl.hidden = false;
+  updateFacetCount();
+}
+
+// --- Client-side analytics builder (used when facet filters are active) ---
+
+function buildAnalytics(docs) {
+  function statsOf(arr) {
+    if (!arr.length) return { count: 0, min: null, max: null, mean: null, median: null };
+    const s = [...arr].sort((a, b) => a - b);
+    return {
+      count: s.length,
+      min: s[0], max: s[s.length - 1],
+      mean: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length),
+      median: s.length % 2 === 0 ? (s[s.length / 2 - 1] + s[s.length / 2]) / 2 : s[Math.floor(s.length / 2)]
+    };
+  }
+
+  const byYearPagesMap  = new Map();
+  const byYearWordsMap  = new Map();
+  const byYearCountMap  = new Map();
+  const themeMap        = new Map();
+  const ngramMap        = new Map();
+  const methMap         = new Map();
+  const pairMap         = new Map();
+  const termCountMap    = new Map();
+  const conceptDocMap   = new Map();
+  const supCountMap     = new Map();
+  const supConceptMap   = new Map();
+  const mcCountMap      = new Map();
+  const conceptYearMap  = new Map();
+
+  for (const doc of docs) {
+    const { year, pages, wordCount,
+      themes = [], conceptTerms = [],
+      methodologies: meths = [], supervisors: sups = [] } = doc;
+
+    if (year) {
+      if (!byYearCountMap.has(year)) {
+        byYearPagesMap.set(year, []); byYearWordsMap.set(year, []); byYearCountMap.set(year, 0);
+      }
+      if (pages) byYearPagesMap.get(year).push(pages);
+      if (wordCount) byYearWordsMap.get(year).push(wordCount);
+      byYearCountMap.set(year, byYearCountMap.get(year) + 1);
+    }
+
+    for (const t of themes) themeMap.set(t, (themeMap.get(t) || 0) + 1);
+
+    for (const t of conceptTerms) {
+      ngramMap.set(t, (ngramMap.get(t) || 0) + 1);
+      if (!conceptDocMap.has(t)) conceptDocMap.set(t, { sum: 0, count: 0 });
+      const e = conceptDocMap.get(t);
+      e.sum += wordCount || 0; e.count += 1;
+      if (year) {
+        if (!conceptYearMap.has(t)) conceptYearMap.set(t, new Map());
+        const ym = conceptYearMap.get(t);
+        ym.set(year, (ym.get(year) || 0) + 1);
+      }
+    }
+
+    for (const m of meths) methMap.set(m, (methMap.get(m) || 0) + 1);
+
+    for (const t of new Set(conceptTerms)) termCountMap.set(t, (termCountMap.get(t) || 0) + 1);
+
+    for (const sup of sups) {
+      supCountMap.set(sup, (supCountMap.get(sup) || 0) + 1);
+      if (!supConceptMap.has(sup)) supConceptMap.set(sup, new Map());
+      const sm = supConceptMap.get(sup);
+      for (const t of conceptTerms) sm.set(t, (sm.get(t) || 0) + 1);
+    }
+
+    for (const m of meths) {
+      for (const t of conceptTerms) {
+        const key = `${m}\0${t}`;
+        mcCountMap.set(key, (mcCountMap.get(key) || 0) + 1);
+      }
+    }
+  }
+
+  const sortedYears = Array.from(byYearCountMap.keys()).sort((a, b) => a - b);
+
+  const byYear = sortedYears.map(year => {
+    const ws = statsOf(byYearWordsMap.get(year));
+    return { year, count: byYearCountMap.get(year), mean: ws.mean, min: ws.min, max: ws.max };
+  });
+
+  const avgPagesByYear = sortedYears.map(year => {
+    const ps = statsOf(byYearPagesMap.get(year));
+    return { year, mean: ps.mean, min: ps.min, max: ps.max, count: ps.count };
+  });
+
+  const pageTrend = sortedYears.map(year => {
+    const ps = statsOf(byYearPagesMap.get(year));
+    return { year, median: ps.median, min: ps.min, max: ps.max, count: ps.count };
+  });
+
+  const byConcept = Array.from(conceptDocMap.entries())
+    .map(([concept, { sum, count }]) => ({ concept, weightedMean: count ? Math.round(sum / count) : 0, docCount: count }))
+    .sort((a, b) => b.weightedMean - a.weightedMean)
+    .slice(0, 20);
+
+  const overallPageCount = statsOf(docs.map(d => d.pages).filter(Boolean));
+  const overallWordCount = statsOf(docs.map(d => d.wordCount).filter(Boolean));
+
+  const metrics = { recordCount: docs.length, byYear, avgPagesByYear, pageTrend, byConcept, overallPageCount, overallWordCount };
+
+  const wordCloud = Array.from(themeMap.entries())
+    .map(([term, count]) => ({ term, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 70);
+
+  const ngramCloud = Array.from(ngramMap.entries())
+    .map(([term, count]) => ({ term, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 60);
+
+  const methodologies = Array.from(methMap.entries())
+    .map(([methodology, count]) => ({ methodology, count }))
+    .sort((a, b) => b.count - a.count);
+
+  for (const doc of docs) {
+    const multiDocTerms = (doc.conceptTerms || [])
+      .filter((t) => (termCountMap.get(t) || 0) >= 2 && !COOCCURRENCE_BLOCKLIST.has(t));
+    if (multiDocTerms.length < 2) continue;
+    const sorted = [...new Set(multiDocTerms)].sort();
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < sorted.length; j++) {
+        const key = `${sorted[i]}\0${sorted[j]}`;
+        pairMap.set(key, (pairMap.get(key) || 0) + 1);
+      }
+    }
+  }
+
+  const N = docs.length;
+  const termCooccurrence = Array.from(pairMap.entries())
+    .filter(([, count]) => count >= 2)
+    .map(([key, count]) => {
+      const [termA, termB] = key.split('\0');
+      const freqA = termCountMap.get(termA) || 1;
+      const freqB = termCountMap.get(termB) || 1;
+      if (count / Math.min(freqA, freqB) >= 0.7) return null;
+      const lift = (count * N) / (freqA * freqB);
+      return { termA, termB, count, lift: Math.round(lift * 10) / 10, freqA, freqB };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.lift - a.lift || b.count - a.count)
+    .slice(0, 20);
+
+  const topSups = Array.from(supCountMap.entries()).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([s]) => s);
+  const top10Ngrams = ngramCloud.slice(0, 10).map(w => w.term);
+  const supervisorNgramMatrix = {
+    supervisors: topSups,
+    ngrams: top10Ngrams,
+    matrix: topSups.map(sup => top10Ngrams.map(concept => supConceptMap.get(sup)?.get(concept) || 0))
+  };
+
+  const top8Concepts = ngramCloud.slice(0, 8).map(w => w.term);
+  const conceptTimeline = top8Concepts
+    .map(concept => {
+      const ym = conceptYearMap.get(concept) || new Map();
+      const data = sortedYears.map(year => ({ year, count: ym.get(year) || 0 }));
+      const totalDocs = Array.from(ym.values()).reduce((a, b) => a + b, 0);
+      return { concept, data, totalDocs };
+    })
+    .filter(s => s.totalDocs > 0);
+
+  const topMeths     = methodologies.slice(0, 10).map(m => m.methodology);
+  const top10Concepts = ngramCloud.slice(0, 10).map(w => w.term);
+  const methodologyConceptMatrix = {
+    methodologies: topMeths,
+    concepts: top10Concepts,
+    matrix: topMeths.map(meth => top10Concepts.map(concept => mcCountMap.get(`${meth}\0${concept}`) || 0))
+  };
+
+  const top30 = ngramCloud.slice(0, 30).map(w => ({ term: w.term, count: w.count }));
+  const researchGaps = [];
+  for (let i = 0; i < top30.length; i++) {
+    for (let j = i + 1; j < top30.length; j++) {
+      const { term: tA, count: cA } = top30[i];
+      const { term: tB, count: cB } = top30[j];
+      const key = tA < tB ? `${tA}\0${tB}` : `${tB}\0${tA}`;
+      const cooc = pairMap.get(key) || 0;
+      researchGaps.push({ conceptA: tA, conceptB: tB, gapScore: (cA * cB) / (cooc + 1) });
+    }
+  }
+  researchGaps.sort((a, b) => b.gapScore - a.gapScore);
+
+  let topicData = null;
+  const srcTopics = state.payload?.topicData?.topics;
+  if (srcTopics && srcTopics.length) {
+    const topicCountMap = new Map();
+    const topicYearMap = new Map();
+    for (const doc of docs) {
+      if (doc.topicId == null) continue;
+      topicCountMap.set(doc.topicId, (topicCountMap.get(doc.topicId) || 0) + 1);
+      if (doc.year) {
+        if (!topicYearMap.has(doc.topicId)) topicYearMap.set(doc.topicId, new Map());
+        const ym = topicYearMap.get(doc.topicId);
+        ym.set(doc.year, (ym.get(doc.year) || 0) + 1);
+      }
+    }
+    const filteredTopics = srcTopics
+      .map((t) => ({ ...t, docCount: topicCountMap.get(t.topicId) || 0 }))
+      .filter((t) => t.docCount > 0)
+      .sort((a, b) => b.docCount - a.docCount);
+    const byYear = filteredTopics
+      .filter((t) => t.topicId !== -1)
+      .slice(0, 8)
+      .map((topic) => {
+        const ym = topicYearMap.get(topic.topicId) || new Map();
+        const data = Array.from(ym.entries())
+          .map(([yr, cnt]) => ({ year: Number(yr), count: cnt }))
+          .sort((a, b) => a.year - b.year);
+        return { topicId: topic.topicId, label: topic.label, data };
+      });
+    topicData = { topics: filteredTopics, byYear };
+  }
+
+  const supervisorNetwork = null;
+  const citationCooccurrence = state.payload?.citationCooccurrence || null;
+
+  let methodologyTopicMatrix = null;
+  if (topicData?.topics?.length) {
+    const mtMeths = methodologies.slice(0, 10).map(m => m.methodology);
+    const mtTopics = topicData.topics.filter(t => t.topicId !== -1).slice(0, 8);
+    const mtTopicIds = mtTopics.map(t => t.topicId);
+    const mtMatrix = mtMeths.map(() => mtTopicIds.map(() => 0));
+    const mtTopicSet = new Set(mtTopicIds);
+    const mtMethSet = new Set(mtMeths);
+    for (const doc of docs) {
+      if (doc.topicId == null || !mtTopicSet.has(doc.topicId)) continue;
+      const ti = mtTopicIds.indexOf(doc.topicId);
+      for (const m of (doc.methodologies || [])) {
+        if (!mtMethSet.has(m)) continue;
+        mtMatrix[mtMeths.indexOf(m)][ti]++;
+      }
+    }
+    methodologyTopicMatrix = {
+      methodologies: mtMeths,
+      topics: mtTopics.map(t => ({ topicId: t.topicId, label: t.label })),
+      matrix: mtMatrix
+    };
+  }
+
+  return { metrics, wordCloud, ngramCloud, methodologies, supervisorNgramMatrix, termCooccurrence, conceptTimeline, methodologyConceptMatrix, researchGaps: researchGaps.slice(0, 15), supervisorNetwork, citationCooccurrence, methodologyTopicMatrix, topicData };
+}
+
+function getAnalytics() {
+  if (!state.payload) return null;
+  const { degree, program, affiliation } = state.activeFilters;
+  if (!degree && !program && !affiliation) return state.payload;
+  const key = `${degree}\0${program}\0${affiliation}`;
+  if (_analyticsCache && _analyticsCacheKey === key) return _analyticsCache;
+  _analyticsCache = buildAnalytics(getFilteredDocs());
+  _analyticsCacheKey = key;
+  return _analyticsCache;
+}
+
 function renderAll() {
   renderDocuments();
   renderKpis();
@@ -1538,8 +3074,18 @@ function renderAll() {
   renderCooccurrence();
   renderSupervisorHeatmap();
   renderConceptTimeline();
+  renderTopicDistribution();
+  renderTopicTimeline();
+  renderSupervisorTopicHeatmap();
   renderMethodologyConceptMatrix();
   renderResearchGaps();
+  if (document.querySelector('.analytics-tab-section#analytics-visualizations.active')) {
+    renderTopicCluster();
+    renderTopicDendrogram();
+    renderTopicSankey();
+    renderMethTopicBubble();
+  }
+  if (document.querySelector('#tab-people.active')) renderPersonTable();
 }
 
 // --- Data loading ---
@@ -1558,14 +3104,20 @@ async function loadData() {
     }
 
     state.payload = await res.json();
+    _analyticsCache = null;
+    _analyticsCacheKey = '';
+    _personListCache = null;
+    _personListCacheKey = '';
     state.selectedDocId = state.payload.documents?.[0]?.id || null;
     state.selectedTheme = null;
     state.sortKey = null;
     state.sortDir = 'asc';
     state.filterText = '';
+    state.selectedPersonKey = null;
     state.selectedDocIds = new Set();
     docFilterEl.value = '';
     renderAll();
+    populateFacetFilters();
 
     const time = new Date(state.payload.generatedAt).toLocaleString();
     setStatus(`${formatNum(state.payload.metrics.recordCount)} documents loaded. Generated ${time}.`);
@@ -1587,6 +3139,10 @@ for (const btn of tabButtons) {
 
 for (const btn of citationTabButtons) {
   btn.addEventListener('click', () => setActiveCitationTab(btn.dataset.citationTab));
+}
+
+for (const btn of analyticsTabButtons) {
+  btn.addEventListener('click', () => setActiveAnalyticsTab(btn.dataset.analyticsTab));
 }
 
 // Sort headers
@@ -1694,6 +3250,87 @@ selectAllDocsEl.addEventListener('change', () => {
       state.selectedDocIds.delete(id);
     }
   }
+});
+
+// Facet filter handlers
+function onFacetChange() {
+  state.activeFilters.degree      = filterDegreeEl.value;
+  state.activeFilters.program     = filterProgramEl.value;
+  state.activeFilters.affiliation = filterAffiliationEl.value;
+  updateFacetCount();
+  if (!getFilteredDocs().some(d => d.id === state.selectedDocId)) state.selectedDocId = null;
+  if (!getFilteredDocs().some(d => d.id === state.citationDocId)) {
+    state.citationDocId = null;
+    citationEntriesEl.innerHTML = '<p class="meta">Select a document to view its works cited.</p>';
+    citationListTitleEl.textContent = 'Works Cited';
+  }
+  renderAll();
+  if (document.querySelector('#tab-citations.active')) renderCitationDocs();
+}
+filterDegreeEl.addEventListener('change', onFacetChange);
+filterProgramEl.addEventListener('change', onFacetChange);
+filterAffiliationEl.addEventListener('change', onFacetChange);
+clearFacetsBtn.addEventListener('click', () => {
+  filterDegreeEl.value = filterProgramEl.value = filterAffiliationEl.value = '';
+  onFacetChange();
+});
+facetChipsEl.addEventListener('click', (e) => {
+  const btn = e.target.closest('.facet-chip-remove');
+  if (!btn) return;
+  const key = btn.dataset.chipKey;
+  if (key === 'degree')      filterDegreeEl.value = '';
+  if (key === 'program')     filterProgramEl.value = '';
+  if (key === 'affiliation') filterAffiliationEl.value = '';
+  onFacetChange();
+});
+
+// Delegated row click — navigate to document
+documentsTableEl.addEventListener('click', (e) => {
+  if (e.target.closest('.doc-row-check')) return;
+  const row = e.target.closest('.doc-row');
+  if (row) openRecord(row.dataset.docId, 'records');
+});
+
+// Delegated checkbox change — update selection state
+documentsTableEl.addEventListener('change', (e) => {
+  const cb = e.target.closest('.doc-row-check');
+  if (!cb) return;
+  const id = cb.dataset.checkId;
+  if (cb.checked) state.selectedDocIds.add(id);
+  else state.selectedDocIds.delete(id);
+  syncSelectAllDocs();
+});
+
+// Person Explorer event wiring
+personTableEl.addEventListener('click', (e) => {
+  const row = e.target.closest('.doc-row');
+  if (!row) return;
+  state.selectedPersonKey = row.dataset.personKey;
+  renderPersonTable();
+  renderPersonDetail(state.selectedPersonKey);
+});
+
+for (const th of personSortHeaders) {
+  th.addEventListener('click', () => {
+    const key = th.dataset.personSort;
+    if (state.personSortKey === key) {
+      state.personSortDir = state.personSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.personSortKey = key;
+      state.personSortDir = key === 'name' ? 'asc' : 'desc';
+    }
+    renderPersonTable();
+  });
+}
+
+personFilterEl.addEventListener('input', () => {
+  state.personFilterText = personFilterEl.value.trim();
+  renderPersonTable();
+});
+
+personRoleFilterEl.addEventListener('change', () => {
+  state.personRoleFilter = personRoleFilterEl.value;
+  renderPersonTable();
 });
 
 // Staggered reveal animation

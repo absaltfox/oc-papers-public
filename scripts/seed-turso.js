@@ -15,7 +15,7 @@ import path from 'node:path';
 const SQLITE_PATH = process.env.SQLITE_PATH || path.join(process.cwd(), 'data', 'metrics.sqlite');
 const TURSO_URL = process.env.TURSO_DATABASE_URL;
 const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
-const BATCH_SIZE = 50;
+const BATCH_SIZE = 200;
 
 if (!TURSO_URL) {
   console.error('Error: TURSO_DATABASE_URL environment variable is required.');
@@ -82,6 +82,35 @@ async function ensureSchema() {
       updated_at TEXT NOT NULL,
       UNIQUE(doc_id, name, role)
     );
+
+    CREATE TABLE IF NOT EXISTS topics (
+      topic_id    INTEGER PRIMARY KEY,
+      label       TEXT NOT NULL,
+      top_terms   TEXT NOT NULL,
+      doc_count   INTEGER NOT NULL,
+      model_name  TEXT NOT NULL,
+      created_at  TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS document_topics (
+      doc_id      TEXT NOT NULL,
+      topic_id    INTEGER NOT NULL,
+      probability REAL,
+      PRIMARY KEY (doc_id, topic_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS document_topic_coords (
+      doc_id  TEXT PRIMARY KEY,
+      umap_x  REAL NOT NULL,
+      umap_y  REAL NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS topic_hierarchy_meta (
+      id              INTEGER PRIMARY KEY DEFAULT 1,
+      leaf_topic_ids  TEXT NOT NULL,
+      linkage_json    TEXT NOT NULL,
+      created_at      TEXT NOT NULL
+    );
   `);
   console.log('Schema ensured.');
 }
@@ -95,9 +124,20 @@ async function seedTable(tableName, rows, buildStatement) {
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE);
     const statements = batch.map((row) => buildStatement(row));
-    await dest.batch(statements, 'write');
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await dest.batch(statements, 'write');
+        break;
+      } catch (err) {
+        if (attempt === 3) throw err;
+        console.warn(`\n  ${tableName}: batch at ${seeded} failed (attempt ${attempt}), retrying in 5s...`);
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+    }
     seeded += batch.length;
     process.stdout.write(`\r  ${tableName}: ${seeded}/${rows.length}`);
+    // Small delay every 2000 rows to avoid connection exhaustion
+    if (seeded % 2000 === 0) await new Promise((r) => setTimeout(r, 500));
   }
   console.log(`\r  ${tableName}: ${seeded} rows seeded.`);
 }
@@ -134,10 +174,19 @@ async function main() {
     ]
   }));
 
+  // Clear citation-related tables first to avoid FK constraint failures
+  // (INSERT OR REPLACE on citations deletes+re-inserts, breaking FK refs)
+  console.log('  Clearing citation tables for clean re-seed...');
+  await dest.executeMultiple(`
+    DELETE FROM catalogue_lookups;
+    DELETE FROM document_citations;
+    DELETE FROM citations;
+  `);
+
   // Seed citations
   const citations = src.prepare('SELECT id, citation_hash, citation_text, created_at FROM citations').all();
   await seedTable('citations', citations, (row) => ({
-    sql: `INSERT OR IGNORE INTO citations (id, citation_hash, citation_text, created_at) VALUES (?, ?, ?, ?)`,
+    sql: `INSERT OR REPLACE INTO citations (id, citation_hash, citation_text, created_at) VALUES (?, ?, ?, ?)`,
     args: [row.id, row.citation_hash, row.citation_text, row.created_at]
   }));
 
@@ -165,6 +214,54 @@ async function main() {
   await seedTable('committee_members', committeeMembers, (row) => ({
     sql: `INSERT OR IGNORE INTO committee_members (doc_id, name, role, affiliation, source, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
     args: [row.doc_id, row.name, row.role ?? null, row.affiliation ?? null, row.source, row.updated_at]
+  }));
+
+  // Seed topics
+  let topics = [];
+  try {
+    topics = src.prepare('SELECT topic_id, label, top_terms, doc_count, model_name, created_at FROM topics').all();
+  } catch {
+    console.log('  topics: table not found, skipping.');
+  }
+  await seedTable('topics', topics, (row) => ({
+    sql: `INSERT OR REPLACE INTO topics (topic_id, label, top_terms, doc_count, model_name, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    args: [row.topic_id, row.label, row.top_terms, row.doc_count, row.model_name, row.created_at]
+  }));
+
+  // Seed document_topics
+  let docTopics = [];
+  try {
+    docTopics = src.prepare('SELECT doc_id, topic_id, probability FROM document_topics').all();
+  } catch {
+    console.log('  document_topics: table not found, skipping.');
+  }
+  await seedTable('document_topics', docTopics, (row) => ({
+    sql: `INSERT OR REPLACE INTO document_topics (doc_id, topic_id, probability) VALUES (?, ?, ?)`,
+    args: [row.doc_id, row.topic_id, row.probability ?? null]
+  }));
+
+  // Seed document_topic_coords
+  let topicCoords = [];
+  try {
+    topicCoords = src.prepare('SELECT doc_id, umap_x, umap_y FROM document_topic_coords').all();
+  } catch {
+    console.log('  document_topic_coords: table not found, skipping.');
+  }
+  await seedTable('document_topic_coords', topicCoords, (row) => ({
+    sql: `INSERT OR REPLACE INTO document_topic_coords (doc_id, umap_x, umap_y) VALUES (?, ?, ?)`,
+    args: [row.doc_id, row.umap_x, row.umap_y]
+  }));
+
+  // Seed topic_hierarchy_meta
+  let hierarchyMeta = [];
+  try {
+    hierarchyMeta = src.prepare('SELECT id, leaf_topic_ids, linkage_json, created_at FROM topic_hierarchy_meta').all();
+  } catch {
+    console.log('  topic_hierarchy_meta: table not found, skipping.');
+  }
+  await seedTable('topic_hierarchy_meta', hierarchyMeta, (row) => ({
+    sql: `INSERT OR REPLACE INTO topic_hierarchy_meta (id, leaf_topic_ids, linkage_json, created_at) VALUES (?, ?, ?, ?)`,
+    args: [row.id, row.leaf_topic_ids, row.linkage_json, row.created_at]
   }));
 
   console.log('\nSeed complete.');

@@ -4,3 +4,4 @@ data/*.sqlite
 data/*.sqlite-*
 data/pdf-cache/
 .vercel
+.env*.local

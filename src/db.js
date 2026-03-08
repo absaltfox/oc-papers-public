@@ -38,7 +38,7 @@ export async function listAllFileMetrics() {
 
 export async function listAllCommitteeMembers() {
   const result = await client.execute(`
-    SELECT doc_id, name, role, affiliation
+    SELECT doc_id, name, role, affiliation, source
     FROM committee_members
     ORDER BY id
   `);
@@ -112,6 +112,95 @@ export async function loadDocsByCitation(citationId) {
       ORDER BY title
     `,
     args: [citationId]
+  });
+  return result.rows;
+}
+
+// --- Topic functions ---
+
+export async function hasTopics() {
+  try {
+    const result = await client.execute('SELECT 1 FROM topics LIMIT 1');
+    return result.rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export async function loadTopics() {
+  const result = await client.execute('SELECT topic_id, label, top_terms, doc_count, model_name, created_at FROM topics ORDER BY doc_count DESC');
+  return result.rows.map((row) => ({
+    topicId: Number(row.topic_id),
+    label: row.label,
+    topTerms: (() => { try { return JSON.parse(row.top_terms); } catch { return []; } })(),
+    docCount: Number(row.doc_count),
+    modelName: row.model_name,
+    createdAt: row.created_at,
+  }));
+}
+
+export async function loadDocumentTopics() {
+  const result = await client.execute('SELECT doc_id, topic_id, probability FROM document_topics');
+  const map = new Map();
+  for (const row of result.rows) {
+    map.set(row.doc_id, { topicId: Number(row.topic_id), probability: row.probability != null ? Number(row.probability) : null });
+  }
+  return map;
+}
+
+export async function loadDocumentTopicCoords() {
+  try {
+    const result = await client.execute('SELECT doc_id, umap_x, umap_y FROM document_topic_coords');
+    const map = new Map();
+    for (const row of result.rows) {
+      map.set(row.doc_id, { x: Number(row.umap_x), y: Number(row.umap_y) });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+export async function loadTopicHierarchy() {
+  try {
+    const result = await client.execute('SELECT leaf_topic_ids, linkage_json FROM topic_hierarchy_meta WHERE id = 1');
+    if (!result.rows.length) return null;
+    const row = result.rows[0];
+    return {
+      leafTopicIds: JSON.parse(row.leaf_topic_ids),
+      linkage: JSON.parse(row.linkage_json),
+    };
+  } catch { return null; }
+}
+
+export async function getCitationCooccurrence(limit = 100) {
+  const result = await client.execute({
+    sql: `
+      WITH top_citations AS (
+        SELECT citation_id, COUNT(DISTINCT doc_id) AS cnt
+        FROM document_citations
+        GROUP BY citation_id
+        HAVING cnt >= 2
+        ORDER BY cnt DESC
+        LIMIT 50
+      )
+      SELECT
+        c1.id AS id1, substr(c1.citation_text, 1, 80) AS text1, tc1.cnt AS freq1,
+        c2.id AS id2, substr(c2.citation_text, 1, 80) AS text2, tc2.cnt AS freq2,
+        COUNT(DISTINCT dc1.doc_id) AS shared
+      FROM document_citations dc1
+      JOIN document_citations dc2
+        ON dc1.doc_id = dc2.doc_id AND dc1.citation_id < dc2.citation_id
+      JOIN citations c1 ON c1.id = dc1.citation_id
+      JOIN citations c2 ON c2.id = dc2.citation_id
+      JOIN top_citations tc1 ON tc1.citation_id = c1.id
+      JOIN top_citations tc2 ON tc2.citation_id = c2.id
+      GROUP BY dc1.citation_id, dc2.citation_id
+      HAVING shared >= 2
+      ORDER BY shared DESC
+      LIMIT ?
+    `,
+    args: [limit]
   });
   return result.rows;
 }
