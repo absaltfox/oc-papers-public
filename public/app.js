@@ -2031,6 +2031,22 @@ function renderTopicCluster() {
       if (e.target.closest('.cluster-dot')) topicClusterTooltipEl.hidden = true;
     });
 
+    addTouchTooltip(topicClusterChartEl, '.cluster-dot', (dot) => {
+      const doc = _topicClusterDocs[+dot.dataset.idx];
+      if (!doc) return;
+      const topic = _topicClusterTd?.topics?.find(t => t.topicId === doc.topicId);
+      const label = doc.topicId === -1 ? 'Uncategorized' : topicDisplayLabel(topic?.label || '');
+      topicClusterTooltipEl.hidden = false;
+      topicClusterTooltipEl.innerHTML = `
+        <div class="tooltip-title">${escapeHtml((doc.title || '').slice(0, 100))}</div>
+        <div class="tooltip-meta">${doc.year || '\u2014'} \u00B7 ${escapeHtml(label)}</div>
+      `;
+      const rect = topicClusterContainerEl.getBoundingClientRect();
+      const dotRect = dot.getBoundingClientRect();
+      topicClusterTooltipEl.style.left = (dotRect.left - rect.left + 12) + 'px';
+      topicClusterTooltipEl.style.top = (dotRect.top - rect.top - 10) + 'px';
+    });
+
     topicClusterChartEl.addEventListener('click', e => {
       const dot = e.target.closest('.cluster-dot');
       if (!dot) return;
@@ -2088,6 +2104,22 @@ function showNetTooltip(containerEl, tooltipEl, target, html) {
   tooltipEl.style.left = left + 'px';
   tooltipEl.style.top = top + 'px';
 }
+
+// --- Touch tooltip helper ---
+
+function addTouchTooltip(chartEl, selector, showFn) {
+  chartEl.addEventListener('touchstart', (e) => {
+    const el = e.target.closest(selector);
+    if (!el) return;
+    e.preventDefault();
+    showFn(el);
+  }, { passive: false });
+}
+
+document.addEventListener('touchstart', (e) => {
+  if (!e.target.closest('.scatter-tooltip') && !e.target.closest('svg[viewBox]'))
+    document.querySelectorAll('.scatter-tooltip').forEach(t => t.hidden = true);
+});
 
 // --- Topic Hierarchy Dendrogram ---
 
@@ -2252,6 +2284,25 @@ function renderTopicDendrogram() {
   chart.addEventListener('mouseout', (e) => {
     const el = e.target.closest('[data-dendro-idx]');
     if (el) tooltip.hidden = true;
+  });
+  addTouchTooltip(chart, '[data-dendro-idx]', (el) => {
+    const idx = +el.dataset.dendroIdx;
+    const leaf = leaves[idx];
+    if (!leaf) return;
+    const t = leaf.topic;
+    const label = topicDisplayLabel(t.label);
+    const terms = (t.topTerms || []).slice(0, 5).map(p => p[0]).join(', ');
+    tooltip.innerHTML = `<strong>${escapeHtml(label)}</strong>
+      <div class="tooltip-meta">${t.docCount} dissertation(s)</div>
+      <div class="tooltip-meta" style="margin-top:2px">Top terms: ${escapeHtml(terms)}</div>`;
+    tooltip.hidden = false;
+    const rect = container.getBoundingClientRect();
+    const svgRect = chart.getBoundingClientRect();
+    const scale = svgRect.width / 940;
+    const cx = leaf.x * scale + svgRect.left - rect.left;
+    const cy = leaf.y * scale + svgRect.top - rect.top;
+    tooltip.style.left = `${cx + 15}px`;
+    tooltip.style.top = `${cy - 10}px`;
   });
   chart.addEventListener('click', (e) => {
     const el = e.target.closest('[data-dendro-idx]');
@@ -2447,6 +2498,17 @@ function renderMethTopicBubble() {
 
     methTopicBubbleChartEl.addEventListener('mouseout', e => {
       if (e.target.closest('.net-node')) methTopicBubbleTooltipEl.hidden = true;
+    });
+
+    addTouchTooltip(methTopicBubbleChartEl, '.net-node', (node) => {
+      const d = _methTopicData;
+      if (!d) return;
+      const mi = +node.dataset.mi;
+      const ti = +node.dataset.ti;
+      const val = d.matrix[mi]?.[ti] || 0;
+      showNetTooltip(methTopicBubbleContainerEl, methTopicBubbleTooltipEl, node,
+        `<div class="tooltip-title">${escapeHtml(d.methodologies[mi])}</div>
+         <div class="tooltip-meta">${escapeHtml(topicDisplayLabel(d.topics[ti]?.label || ''))} \u00B7 ${val} dissertation(s)</div>`);
     });
 
     methTopicBubbleChartEl.addEventListener('click', e => {
